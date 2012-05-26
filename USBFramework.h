@@ -38,14 +38,14 @@
 #define PHYSICAL	0x23
 
 // offsets from the beginning of the setup data record
-#define	bmRequestType	0x00
-#define	bRequest	0x01
-#define	wValue		0x02
-#define	wValueHigh	0x03
-#define	wIndex		0x04
-#define	wIndexHigh	0x05
-#define	wLength		0x06
-#define	wLengthHigh	0x07
+#define	bmRequestType_OFFSET	0x00
+#define	bRequest_OFFSET         0x01
+#define	wValueL_OFFSET		0x02
+#define	wValueH_OFFSET	0x03
+#define	wIndexL_OFFSET		0x04
+#define	wIndexH_OFFSET	0x05
+#define	wLengthL_OFFSET		0x06
+#define	wLengthH_OFFSET	0x07
 
 // Standard USB requests
 #define NO_REQUEST		0xFF
@@ -124,6 +124,12 @@ typedef enum _USBEngineStatus {
     USBEngineStatusAddressing = 0x01,
     USBEngineStatusSendingDescriptor = 0x02
 } USBEngineStatus;
+
+typedef enum _USBToken {
+    USBTokenSETUP = 0b1101,
+    USBTokenIN =    0b1001,
+    USBTokenOUT =   0b0001
+} USBToken;
 
 typedef struct _USBBufferDescriptor {
 	unsigned char status;

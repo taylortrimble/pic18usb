@@ -287,10 +287,10 @@ void ProcessSetupToken(void) {
     }
     _USBBD0O.bytecount = MAX_PACKET_SIZE;   // reset the EP0 OUT byte count
     _USBBD0I.status = 0x08;         // return the EP0 IN buffer to us (dequeue any pending requests)
-    _USBBD0O.status = (!(gBufferData[bmRequestType]&0x80) && (gBufferData[wLength] || gBufferData[wLengthHigh])) ? 0xC8:0x88;   // set EP0 OUT UOWN back to USB and DATA0/DATA1 packet according to the request type
+    _USBBD0O.status = (!(gBufferData[bmRequestType_OFFSET]&0x80) && (gBufferData[wLengthL_OFFSET] || gBufferData[wLengthH_OFFSET])) ? 0xC8:0x88;   // set EP0 OUT UOWN back to USB and DATA0/DATA1 packet according to the request type
     UCONbits.PKTDIS = 0;            // assuming there is nothing to dequeue, clear the packet disable bit
     _USBEngineStatus = USBEngineStatusReset;       // clear the device request in process
-    switch (gBufferData[bmRequestType]&0x60) {  // extract request type bits
+    switch (gBufferData[bmRequestType_OFFSET]&0x60) {  // extract request type bits
         case STANDARD:
             StandardRequests();
             break;
@@ -310,9 +310,23 @@ void StandardRequests(void) {
     unsigned char n;
     USBBufferDescriptor *currentBufferDescriptor;
 
-    switch (gBufferData[bRequest]) {
+    // Some of my framework's variables for processing requests
+    unsigned char bRequest;
+    unsigned char bmRequestType;
+    unsigned wValue;
+    unsigned wIndex;
+    unsigned wLength;
+
+    // Initialized in the existing framework style
+    bRequest = gBufferData[bRequest_OFFSET];
+    bmRequestType = gBufferData[bmRequestType_OFFSET];
+    wValue = gBufferData[wValueL_OFFSET] + (gBufferData[wValueH_OFFSET])*0x100;
+    wIndex = gBufferData[wIndexL_OFFSET] + (gBufferData[wIndexH_OFFSET])*0x100;
+    wLength = gBufferData[wLengthL_OFFSET] + (gBufferData[wLengthH_OFFSET])*0x100;
+
+    switch (bRequest) {
         case GET_STATUS:
-            switch (gBufferData[bmRequestType]&0x1F) {  // extract request recipient bits
+            switch (bmRequestType & 0x1F) {  // extract request recipient bits
                 case RECIPIENT_DEVICE:
                     _USBBD0I.address[0] = gUSBDeviceStatus;
                     _USBBD0I.address[1] = 0x00;
@@ -325,7 +339,8 @@ void StandardRequests(void) {
                             HandleError();    // set Request Error Flag
                             break;
                         case USBDeviceStateConfigured:
-                            if (gBufferData[wIndex]<NUM_INTERFACES) {
+                            if ((wIndex & 0x00FF)<NUM_INTERFACES) {
+#warning need to check here and elsewhere that word values wValue, wIndex, wLength are accessing just high or low byte fOR a rEASON!!
                                 _USBBD0I.address[0] = 0x00;
                                 _USBBD0I.address[1] = 0x00;
                                 _USBBD0I.bytecount = 0x02;
@@ -338,8 +353,8 @@ void StandardRequests(void) {
                 case RECIPIENT_ENDPOINT:
                     switch (_USBDeviceState) {
                         case USBDeviceStateAddressed:
-                            if (!(gBufferData[wIndex]&0x0F)) {  // get EP, strip off direction bit and see if it is EP0
-                                _USBBD0I.address[0] = (((gBufferData[wIndex]&0x80) ? _USBBD0I.status:_USBBD0O.status)&0x04)>>2; // return the BSTALL bit of EP0 IN or OUT, whichever was requested
+                            if (!(wIndex&0x0F)) {  // get EP, strip off direction bit and see if it is EP0
+                                _USBBD0I.address[0] = ((((wIndex&0x00FF)&0x80) ? _USBBD0I.status:_USBBD0O.status)&0x04)>>2; // return the BSTALL bit of EP0 IN or OUT, whichever was requested
                                 _USBBD0I.address[1] = 0x00;
                                 _USBBD0I.bytecount = 0x02;
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
@@ -349,9 +364,9 @@ void StandardRequests(void) {
                             break;
                         case USBDeviceStateConfigured:
                             UEP = (unsigned char *)&UEP0;
-                            n = gBufferData[wIndex]&0x0F;   // get EP and strip off direction bit for offset from UEP0
-                            currentBufferDescriptor = &_USBBD0O+((n<<1)|((gBufferData[wIndex]&0x80) ? 0x01:0x00)); // compute pointer to the buffer descriptor for the specified EP
-                            if (UEP[n]&((gBufferData[wIndex]&0x80) ? 0x02:0x04)) { // if the specified EP is enabled for transfers in the specified direction...
+                            n = wIndex & 0x0F;   // get EP and strip off direction bit for offset from UEP0
+                            currentBufferDescriptor = &_USBBD0O+((n<<1)|(((wIndex&0x00FF)&0x80) ? 0x01:0x00)); // compute pointer to the buffer descriptor for the specified EP
+                            if (UEP[n]&(((wIndex&0x00FF)&0x80) ? 0x02:0x04)) { // if the specified EP is enabled for transfers in the specified direction...
                                 _USBBD0I.address[0] = ((currentBufferDescriptor->status)&0x04)>>2; // ...return the BSTALL bit of the specified EP
                                 _USBBD0I.address[1] = 0x00;
                                 _USBBD0I.bytecount = 0x02;
@@ -370,11 +385,11 @@ void StandardRequests(void) {
             break;
         case CLEAR_FEATURE:
         case SET_FEATURE:
-            switch (gBufferData[bmRequestType]&0x1F) {  // extract request recipient bits
+            switch (bmRequestType&0x1F) {  // extract request recipient bits
                 case RECIPIENT_DEVICE:
-                    switch (gBufferData[wValue]) {
+                    switch (wValue & 0x00FF) {
                         case DEVICE_REMOTE_WAKEUP:
-                            if (gBufferData[bRequest]==CLEAR_FEATURE)
+                            if (bRequest == CLEAR_FEATURE)
                                 gUSBDeviceStatus &= 0xFE;
                             else
                                 gUSBDeviceStatus |= 0x01;
@@ -388,7 +403,7 @@ void StandardRequests(void) {
                 case RECIPIENT_ENDPOINT:
                     switch (_USBDeviceState) {
                         case USBDeviceStateAddressed:
-                            if (!(gBufferData[wIndex]&0x0F)) {  // get EP, strip off direction bit, and see if its EP0
+                            if (!(wIndex & 0x0F)) {  // get EP, strip off direction bit, and see if its EP0
                                 _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             } else {
@@ -397,17 +412,17 @@ void StandardRequests(void) {
                             break;
                         case USBDeviceStateConfigured:
                             UEP = (unsigned char *)&UEP0;
-                            if (n = gBufferData[wIndex]&0x0F) { // get EP and strip off direction bit for offset from UEP0, if not EP0...
+                            if (n = wIndex & 0x0F) { // get EP and strip off direction bit for offset from UEP0, if not EP0...
                                 currentBufferDescriptor = &_USBBD0O+((n<<1)|((gBufferData[wIndex]&0x80) ? 0x01:0x00)); // compute pointer to the buffer descriptor for the specified EP
-                                if (gBufferData[wIndex]&0x80) { // if the specified EP direction is IN...
+                                if ((wIndex&0x00FF)&0x80) { // if the specified EP direction is IN...
                                     if (UEP[n]&0x02) {  // if EPn is enabled for IN transfers...
-                                        currentBufferDescriptor->status = (gBufferData[bRequest]==CLEAR_FEATURE) ? 0x00:0x84;
+                                        currentBufferDescriptor->status = (bRequest==CLEAR_FEATURE) ? 0x00:0x84;
                                     } else {
                                         HandleError();    // set Request Error Flag
                                     }
                                 } else {    // ...otherwise the specified EP direction is OUT, so...
                                     if (UEP[n]&0x04) {  // if EPn is enabled for OUT transfers...
-                                        currentBufferDescriptor->status = (gBufferData[bRequest]==CLEAR_FEATURE) ? 0x88:0x84;
+                                        currentBufferDescriptor->status = (bRequest == CLEAR_FEATURE) ? 0x88:0x84;
                                     } else {
                                         HandleError();    // set Request Error Flag
                                     }
@@ -427,28 +442,28 @@ void StandardRequests(void) {
             }
             break;
         case SET_ADDRESS:
-            if (gBufferData[wValue]>0x7F) { // if new device address is illegal, send Request Error
+            if ((wValue&0x00FF)>0x7F) { // if new device address is illegal, send Request Error
                 HandleError();    // set Request Error Flag
             } else {
                 _USBEngineStatus |= USBEngineStatusAddressing;  // processing a SET_ADDRESS request
-                gUSBPendingAddress = gBufferData[wValue];  // save new address
+                gUSBPendingAddress = (wValue&0x00FF);  // save new address
                 _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             }
             break;
         case GET_DESCRIPTOR:
             _USBEngineStatus |= USBEngineStatusSendingDescriptor;   // readying a GET_DESCRIPTOR request
-            switch (gBufferData[wValueHigh]) {
+            switch ((wValue>>8)&0x00FF) {       // High byte indicates which type of descriptor to return
                 case DEVICE:
                     gDescriptorToSend = gkDevice;
                     gUSBBytesLeft = gDescriptorToSend[0];
-                    if ((gBufferData[wLengthHigh]==0x00) && (gBufferData[wLength]<gUSBBytesLeft)) {
-                        gUSBBytesLeft = gBufferData[wLength];
+                    if ((wLength<gUSBBytesLeft)) {
+                        gUSBBytesLeft = wLength;
                     }
                     SendDescriptorPacket();
                     break;
                 case CONFIGURATION:
-                    switch (gBufferData[wValue]) {
+                    switch (wValue & 0x00FF) {
                         case 0:
                             gDescriptorToSend = gkConfiguration1;
                             break;
@@ -457,14 +472,14 @@ void StandardRequests(void) {
                     }
                     if (!(gErrorCondition)) {
                         gUSBBytesLeft = gDescriptorToSend[2];   // wTotalLength at an offset of 2
-                        if ((gBufferData[wLengthHigh]==0x00) && (gBufferData[wLength]<gUSBBytesLeft)) {
-                            gUSBBytesLeft = gBufferData[wLength];
+                        if (wLength<gUSBBytesLeft) {
+                            gUSBBytesLeft = wLength;
                         }
                         SendDescriptorPacket();
                     }
                     break;
                 case STRING:
-                    switch (gBufferData[wValue]) {
+                    switch (wValue & 0x00FF) {
                         case 0:
                             gDescriptorToSend = gkString0;
                             break;
@@ -479,8 +494,8 @@ void StandardRequests(void) {
                     }
                     if (!(gErrorCondition)) {
                         gUSBBytesLeft = gDescriptorToSend[0];
-                        if ((gBufferData[wLengthHigh]==0x00) && (gBufferData[wLength]<gUSBBytesLeft)) {
-                            gUSBBytesLeft = gBufferData[wLength];
+                        if (wLength<gUSBBytesLeft) {
+                            gUSBBytesLeft = wLength;
                         }
                         SendDescriptorPacket();
                     }
@@ -495,7 +510,7 @@ void StandardRequests(void) {
             _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             break;
         case SET_CONFIGURATION:
-            if (gBufferData[wValue]<=NUM_CONFIGURATIONS) {
+            if ((wValue&0x00FF)<=NUM_CONFIGURATIONS) {
                 UEP1 = 0x00;    // clear all EP control registers except for EP0 to disable EP1-EP15 prior to setting configuration
                 UEP2 = 0x00;
                 UEP3 = 0x00;
@@ -503,7 +518,7 @@ void StandardRequests(void) {
                 UEP5 = 0x00;
                 UEP6 = 0x00;
                 UEP7 = 0x00;
-                switch (gCurrentConfiguration = gBufferData[wValue]) {
+                switch (gCurrentConfiguration = (wValue&0x00FF)) {
                     case 0:
                         _USBDeviceState = USBDeviceStateAddressed;
 #ifdef SHOW_ENUM_STATUS
@@ -527,7 +542,7 @@ void StandardRequests(void) {
         case GET_INTERFACE:
             switch (_USBDeviceState) {
                 case USBDeviceStateConfigured:
-                    if (gBufferData[wIndex]<NUM_INTERFACES) {
+                    if ((wIndex&0x00FF)<NUM_INTERFACES) {
                         _USBBD0I.address[0] = 0x00; // always send back 0 for bAlternateSetting
                         _USBBD0I.bytecount = 0x01;
                         _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
@@ -542,8 +557,8 @@ void StandardRequests(void) {
         case SET_INTERFACE:
             switch (_USBDeviceState) {
                 case USBDeviceStateConfigured:
-                    if (gBufferData[wIndex]<NUM_INTERFACES) {
-                        switch (gBufferData[wValue]) {
+                    if ((wIndex&0x00FF)<NUM_INTERFACES) {
+                        switch ((wValue&0x00FF)) {
                             case 0:     // currently support only bAlternateSetting of 0
                                 _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
@@ -567,14 +582,14 @@ void StandardRequests(void) {
 }
 
 void ClassRequests(void) {
-    switch (gBufferData[bRequest]) {
+    switch (gBufferData[bRequest_OFFSET]) {
         default:
             HandleError();    // set Request Error Flag
     }
 }
 
 void VendorRequests(void) {
-    switch (gBufferData[bRequest]) {
+    switch (gBufferData[bRequest_OFFSET]) {
         case SET_RA0:
             PORTAbits.RA0 = 1;      // set RA0 high
             _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
