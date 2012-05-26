@@ -612,8 +612,6 @@ void ProcessInToken(void) {
                 _USBEngineStatus &= ~USBEngineStatusAddressing;
             } else if (_USBEngineStatus & USBEngineStatusSendingDescriptor) {
                 SendDescriptorPacket();
-            } else {
-                HandleError();
             }
             break;
         case EP1:
