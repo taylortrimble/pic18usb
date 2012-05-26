@@ -167,7 +167,6 @@ void _USBWriteDescriptor(rom const unsigned char *descriptor, unsigned char byte
 void _USBWriteSingleDescriptor(rom const unsigned char *descriptor);
 void InitUSB(void);
 void ServiceUSB(void);
-void HandleError(void);
 void ProcessSetupToken(void);
 void ProcessInToken(void);
 void ProcessOutToken(void);
@@ -343,7 +342,6 @@ void ServiceUSB(void) {
                 LATC ^= 0x80;
         }
 #endif
-        gErrorCondition = 0; // clear USB error flags
         switch (gCurrentBufferDescriptor.status&0x3C) {  // extract PID bits
             case TOKEN_SETUP:
                 ProcessSetupToken();
@@ -354,17 +352,7 @@ void ServiceUSB(void) {
             case TOKEN_OUT:
                 ProcessOutToken();
         }
-        if (gErrorCondition) {     // if there was a Request Error...
-            _USBBD0O.count = MAX_PACKET_SIZE;   // ...get ready to receive the next Setup token...
-            _USBBD0I.status = 0x84;
-            _USBBD0O.status = 0x84;                 // ...and issue a protocol stall on EP0
-        }
     }
-}
-
-void HandleError()
-{
-    gErrorCondition = 1;
 }
 
 void ProcessSetupToken(void) {
@@ -389,7 +377,7 @@ void ProcessSetupToken(void) {
             VendorRequests();
             break;
         default:
-            HandleError();    // set Request Error Flag
+            _USBHandleControlError();    // set Request Error Flag
     }
 }
 
@@ -424,7 +412,7 @@ void StandardRequests(void) {
                 case RECIPIENT_INTERFACE:
                     switch (_USBDeviceState) {
                         case USBDeviceStateAddressed:
-                            HandleError();    // set Request Error Flag
+                            _USBHandleControlError();    // set Request Error Flag
                             break;
                         case USBDeviceStateConfigured:
                             if ((wIndex & 0x00FF)<NUM_INTERFACES) {
@@ -434,7 +422,7 @@ void StandardRequests(void) {
                                 _USBBD0I.count = 0x02;
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             } else {
-                                HandleError();    // set Request Error Flag
+                                _USBHandleControlError();    // set Request Error Flag
                             }
                     }
                     break;
@@ -447,7 +435,7 @@ void StandardRequests(void) {
                                 _USBBD0I.count = 0x02;
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             } else {
-                                HandleError();    // set Request Error Flag
+                                _USBHandleControlError();    // set Request Error Flag
                             }
                             break;
                         case USBDeviceStateConfigured:
@@ -460,15 +448,15 @@ void StandardRequests(void) {
                                 _USBBD0I.count = 0x02;
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             } else {
-                                HandleError();    // set Request Error Flag
+                                _USBHandleControlError();    // set Request Error Flag
                             }
                             break;
                         default:
-                            HandleError();    // set Request Error Flag
+                            _USBHandleControlError();    // set Request Error Flag
                     }
                     break;
                 default:
-                    HandleError();    // set Request Error Flag
+                    _USBHandleControlError();    // set Request Error Flag
             }
             break;
         case CLEAR_FEATURE:
@@ -485,7 +473,7 @@ void StandardRequests(void) {
                             _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             break;
                         default:
-                            HandleError();    // set Request Error Flag
+                            _USBHandleControlError();    // set Request Error Flag
                     }
                     break;
                 case RECIPIENT_ENDPOINT:
@@ -495,7 +483,7 @@ void StandardRequests(void) {
                                 _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             } else {
-                                HandleError();    // set Request Error Flag
+                                _USBHandleControlError();    // set Request Error Flag
                             }
                             break;
                         case USBDeviceStateConfigured:
@@ -506,32 +494,28 @@ void StandardRequests(void) {
                                     if (UEP[n]&0x02) {  // if EPn is enabled for IN transfers...
                                         currentBufferDescriptor->status = (bRequest==CLEAR_FEATURE) ? 0x00:0x84;
                                     } else {
-                                        HandleError();    // set Request Error Flag
+                                        _USBHandleControlError();    // set Request Error Flag
                                     }
                                 } else {    // ...otherwise the specified EP direction is OUT, so...
                                     if (UEP[n]&0x04) {  // if EPn is enabled for OUT transfers...
                                         currentBufferDescriptor->status = (bRequest == CLEAR_FEATURE) ? 0x88:0x84;
                                     } else {
-                                        HandleError();    // set Request Error Flag
+                                        _USBHandleControlError();    // set Request Error Flag
                                     }
                                 }
                             }
-                            if (!(gErrorCondition)) {  // if there was no Request Error...
-                                _USBBD0I.count = 0x00;
-                                _USBBD0I.status = 0xC8;     // ...send packet as DATA1, set UOWN bit
-                            }
                             break;
                         default:
-                            HandleError();    // set Request Error Flag
+                            _USBHandleControlError();    // set Request Error Flag
                     }
                     break;
                 default:
-                    HandleError();    // set Request Error Flag
+                    _USBHandleControlError();    // set Request Error Flag
             }
             break;
         case SET_ADDRESS:
             if ((wValue&0x00FF)>0x7F) { // if new device address is illegal, send Request Error
-                HandleError();    // set Request Error Flag
+                _USBHandleControlError();    // set Request Error Flag
             } else {
                 _USBEngineStatus |= USBEngineStatusAddressing;  // processing a SET_ADDRESS request
                 gUSBPendingAddress = (wValue&0x00FF);  // save new address
@@ -556,7 +540,7 @@ void StandardRequests(void) {
                             gDescriptorToSend = gkConfiguration1;
                             break;
                         default:
-                            HandleError();    // set Request Error Flag
+                            _USBHandleControlError();    // set Request Error Flag
                     }
                     if (!(gErrorCondition)) {
                         gUSBBytesLeft = gDescriptorToSend[2];   // wTotalLength at an offset of 2
@@ -578,7 +562,7 @@ void StandardRequests(void) {
                             gDescriptorToSend = gkString2;
                             break;
                         default:
-                            HandleError();    // set Request Error Flag
+                            _USBHandleControlError();    // set Request Error Flag
                     }
                     if (!(gErrorCondition)) {
                         gUSBBytesLeft = gDescriptorToSend[0];
@@ -589,7 +573,7 @@ void StandardRequests(void) {
                     }
                     break;
                 default:
-                    HandleError();    // set Request Error Flag
+                    _USBHandleControlError();    // set Request Error Flag
             }
             break;
         case GET_CONFIGURATION:
@@ -624,7 +608,7 @@ void StandardRequests(void) {
                 _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             } else {
-                HandleError();    // set Request Error Flag
+                _USBHandleControlError();    // set Request Error Flag
             }
             break;
         case GET_INTERFACE:
@@ -635,11 +619,11 @@ void StandardRequests(void) {
                         _USBBD0I.count = 0x01;
                         _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                     } else {
-                        HandleError();    // set Request Error Flag
+                        _USBHandleControlError();    // set Request Error Flag
                     }
                     break;
                 default:
-                    HandleError();    // set Request Error Flag
+                    _USBHandleControlError();    // set Request Error Flag
             }
             break;
         case SET_INTERFACE:
@@ -652,27 +636,27 @@ void StandardRequests(void) {
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                                 break;
                             default:
-                                HandleError();    // set Request Error Flag
+                                _USBHandleControlError();    // set Request Error Flag
                         }
                     } else {
-                        HandleError();    // set Request Error Flag
+                        _USBHandleControlError();    // set Request Error Flag
                     }
                     break;
                 default:
-                    HandleError();    // set Request Error Flag
+                    _USBHandleControlError();    // set Request Error Flag
             }
             break;
         case SET_DESCRIPTOR:
         case SYNCH_FRAME:
         default:
-            HandleError();    // set Request Error Flag
+            _USBHandleControlError();    // set Request Error Flag
     }
 }
 
 void ClassRequests(void) {
     switch (gBufferData[bRequest_OFFSET]) {
         default:
-            HandleError();    // set Request Error Flag
+            _USBHandleControlError();    // set Request Error Flag
     }
 }
 
@@ -689,7 +673,7 @@ void VendorRequests(void) {
             _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             break;
         default:
-            HandleError();    // set Request Error Flag
+            _USBHandleControlError();    // set Request Error Flag
     }
 }
 
