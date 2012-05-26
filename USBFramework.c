@@ -78,14 +78,11 @@
 #pragma udata
 USBBufferDescriptor gCurrentBufferDescriptor;
 unsigned char gBufferData[8];
-unsigned char gErrorCondition;
 unsigned char gCurrentConfiguration;
 unsigned char gUSBDeviceStatus;
 unsigned char _USBEngineStatus;
 unsigned char gUSBPendingAddress;
-unsigned char rom *gDescriptorToSend;   // Remove later
 rom unsigned char *_USBDescriptorToSend;
-unsigned char gUSBBytesLeft;    // Remove later
 unsigned char _USBDescriptorBytesLeft;
 unsigned char gUSBPacketLength;
 unsigned char gCachedUSTAT;
@@ -527,49 +524,30 @@ void StandardRequests(void) {
             _USBEngineStatus |= USBEngineStatusSendingDescriptor;   // readying a GET_DESCRIPTOR request
             switch ((wValue>>8)&0x00FF) {       // High byte indicates which type of descriptor to return
                 case DEVICE:
-                    gDescriptorToSend = gkDevice;
-                    gUSBBytesLeft = gDescriptorToSend[0];
-                    if ((wLength<gUSBBytesLeft)) {
-                        gUSBBytesLeft = wLength;
-                    }
-                    SendDescriptorPacket();
+                    _USBWriteSingleDescriptor(gkDevice);
                     break;
                 case CONFIGURATION:
                     switch (wValue & 0x00FF) {
                         case 0:
-                            gDescriptorToSend = gkConfiguration1;
+                            _USBWriteDescriptor(gkConfiguration1, gkConfiguration1[2]+0x100*gkConfiguration1[3]);
                             break;
                         default:
                             _USBHandleControlError();    // set Request Error Flag
-                    }
-                    if (!(gErrorCondition)) {
-                        gUSBBytesLeft = gDescriptorToSend[2];   // wTotalLength at an offset of 2
-                        if (wLength<gUSBBytesLeft) {
-                            gUSBBytesLeft = wLength;
-                        }
-                        SendDescriptorPacket();
                     }
                     break;
                 case STRING:
                     switch (wValue & 0x00FF) {
                         case 0:
-                            gDescriptorToSend = gkString0;
+                            _USBWriteSingleDescriptor(gkString0);
                             break;
                         case 1:
-                            gDescriptorToSend = gkString1;
+                            _USBWriteSingleDescriptor(gkString1);
                             break;
                         case 2:
-                            gDescriptorToSend = gkString2;
+                            _USBWriteSingleDescriptor(gkString2);
                             break;
                         default:
                             _USBHandleControlError();    // set Request Error Flag
-                    }
-                    if (!(gErrorCondition)) {
-                        gUSBBytesLeft = gDescriptorToSend[0];
-                        if (wLength<gUSBBytesLeft) {
-                            gUSBBytesLeft = wLength;
-                        }
-                        SendDescriptorPacket();
                     }
                     break;
                 default:
@@ -698,7 +676,7 @@ void ProcessInToken(void) {
                 }
                 _USBEngineStatus &= ~USBEngineStatusAddressing;
             } else if (_USBEngineStatus & USBEngineStatusSendingDescriptor) {
-                SendDescriptorPacket();
+                _USBSendDescriptor();
             }
             break;
         case EP1:
@@ -721,24 +699,6 @@ void ProcessOutToken(void) {
         case EP2:
             break;
     }
-}
-
-void SendDescriptorPacket(void) {
-    unsigned char n;
-
-    if (gUSBBytesLeft<MAX_PACKET_SIZE) {
-        _USBEngineStatus &= ~USBEngineStatusSendingDescriptor;   // sending a short packet, no longer sending after this
-        gUSBPacketLength = gUSBBytesLeft;
-        gUSBBytesLeft = 0x00;
-    } else {
-        gUSBPacketLength = MAX_PACKET_SIZE;
-        gUSBBytesLeft -= MAX_PACKET_SIZE;
-    }
-    for (n = 0; n<gUSBPacketLength; n++) {
-        _USBBD0I.address[n] = *gDescriptorToSend++;
-    }
-    _USBBD0I.count = gUSBPacketLength;
-    _USBBD0I.status = ((_USBBD0I.status^0x40)&0x40)|0x88; // toggle the DATA01 bit, clear the PIDs bits, and set the UOWN and DTS bits
 }
 
 void main(void) {
