@@ -55,6 +55,10 @@
 #define	wLengthL_OFFSET		0x06
 #define	wLengthH_OFFSET	0x07
 
+// Offsets in device descriptor
+#define bLength_OFFSET             (0)
+#define bDescriptorType_OFFSET     (1)
+
 // Standard USB requests
 #define NO_REQUEST		0xFF
 #define	GET_STATUS		0x00
@@ -141,7 +145,7 @@ typedef enum _USBToken {
 
 typedef struct _USBBufferDescriptor {
 	unsigned char status;
-	unsigned char bytecount;
+	unsigned char count;
 	unsigned char *address;
 } USBBufferDescriptor;
 

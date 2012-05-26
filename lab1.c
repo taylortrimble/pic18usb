@@ -159,6 +159,12 @@ rom const unsigned char gkString2[] = {         // Device string
 };
 
 #pragma code
+void _USBHandleControlError(void);
+void _USBResetEP0InBuffer(void);
+void _USBWriteValue(unsigned value, unsigned char bytes);
+void _USBSendDescriptor(void);
+void _USBWriteDescriptor(rom const unsigned char *descriptor, unsigned char bytes);
+void _USBWriteSingleDescriptor(rom const unsigned char *descriptor);
 void InitUSB(void);
 void ServiceUSB(void);
 void HandleError(void);
@@ -169,6 +175,86 @@ void ProcessStandardRequests(void);
 void ProcessClassRequests(void);
 void ProcessVendorRequests(void);
 void SendDescriptorPacket(void);
+
+void _USBHandleControlError(void)
+{
+    // Reset EP0 OUT buffer capacity
+    _USBBD0O.count = EP0_SIZE;
+
+    // Stall endpoint 0
+    _USBBD0O.status = (UOWN|BSTALL);
+    _USBBD0I.status = (UOWN|BSTALL);
+}
+
+void _USBResetEP0InBuffer(void)
+{
+    _USBBD0I.count = 0;                    // Not sending a byte
+    _USBBD0I.status = (UOWN|DTS|DTSEN);    // Set UOWN, send byte as DATA1
+}
+
+void _USBWriteValue(unsigned value, unsigned char bytes)
+{
+    unsigned char index;
+
+    // Copy value to EP0 IN buffer 8bits at a time
+    for (index = 0; index < bytes; index++) {
+        _USBBD0I.address[index] = (value>>(index*8))&0x00FF;
+    }
+
+    // Return data to SIE through buffer descriptor
+    _USBBD0I.count = bytes;
+    _USBBD0I.status = (UOWN|DTS|DTSEN);    // Set UOWN, send as DATA1
+}
+
+void _USBSendDescriptor(void)
+{
+    unsigned char index;
+
+    if (_USBDescriptorBytesLeft <= EP0_SIZE) {
+        // Copy remaining bytes to EP0 IN buffer
+        for (index = 0; index < _USBDescriptorBytesLeft; index++) {
+            _USBBD0I.address[index] = *_USBDescriptorToSend++;
+        }
+
+        // Return data to SIE through buffer descriptor
+        _USBBD0I.count = _USBDescriptorBytesLeft;
+        _USBBD0I.status = _USBBD0I.status^DTS;                // Toggle the DATAx bit
+        _USBBD0I.status = (_USBBD0I.status&DTS)|(UOWN|DTSEN); // Preserve DATAx, clear rest, set UOWN and DTSEN
+
+        // Not sending a descriptor any more
+        _USBEngineStatus &= ~USBEngineStatusSendingDescriptor;
+        _USBDescriptorBytesLeft = 0;
+    } else {
+        // Copy a full length of bytes to EP0 IN buffer
+        for (index = 0; index < EP0_SIZE; index++) {
+            _USBBD0I.address[index] = *_USBDescriptorToSend++;
+        }
+
+        // Return data to SIE through buffer descriptor
+        _USBBD0I.count = EP0_SIZE;
+        _USBBD0I.status = _USBBD0I.status^DTS;                // Toggle the DATAx bit
+        _USBBD0I.status = (_USBBD0I.status&DTS)|(UOWN|DTSEN); // Preserve DATAx, clear rest, set UOWN and DTSEN
+
+        // Inform IN token processing to keep sending descriptor
+        _USBEngineStatus |= USBEngineStatusSendingDescriptor;
+        _USBDescriptorBytesLeft -= EP0_SIZE;
+    }
+}
+
+void _USBWriteDescriptor(rom const unsigned char *descriptor, unsigned char bytes)
+{
+    // Simply setup system for global descriptor-sending function
+    _USBDescriptorToSend = descriptor;
+    _USBDescriptorBytesLeft = bytes;
+
+    // Call the function that sends the first set of EP0_SIZE bytes
+    _USBSendDescriptor();
+}
+
+void _USBWriteSingleDescriptor(rom const unsigned char *descriptor)
+{
+    _USBWriteDescriptor(descriptor, descriptor[bLength_OFFSET]);
+}
 
 void InitUSB(void) {
     UIE = 0x00;                 // mask all USB interrupts
@@ -223,7 +309,7 @@ void ServiceUSB(void) {
         UEP5 = 0x00;
         UEP6 = 0x00;
         UEP7 = 0x00;
-        _USBBD0O.bytecount = MAX_PACKET_SIZE;
+        _USBBD0O.count = MAX_PACKET_SIZE;
         _USBBD0O.address = _USBEP0OutBuffer;  // EP0 OUT gets a buffer
         _USBBD0O.status = 0x88;             // set UOWN bit (USB can write)
         _USBBD0I.address = _USBEP0InBuffer;   // EP0 IN gets a buffer
@@ -241,7 +327,7 @@ void ServiceUSB(void) {
     } else if (UIRbits.TRNIF) {
         currentBufferDescriptor = (USBBufferDescriptor *)((unsigned char *)(&_USBBD0O)+(USTAT&0x7C));  // mask out bits 0, 1, and 7 of USTAT for offset into the buffer descriptor table
         gCurrentBufferDescriptor.status = currentBufferDescriptor->status;
-        gCurrentBufferDescriptor.bytecount = currentBufferDescriptor->bytecount;
+        gCurrentBufferDescriptor.count = currentBufferDescriptor->count;
         gCurrentBufferDescriptor.address = currentBufferDescriptor->address;
         gCachedUSTAT = USTAT;      // save the USB status register
         UIRbits.TRNIF = 0;      // clear TRNIF interrupt flag
@@ -269,7 +355,7 @@ void ServiceUSB(void) {
                 ProcessOutToken();
         }
         if (gErrorCondition) {     // if there was a Request Error...
-            _USBBD0O.bytecount = MAX_PACKET_SIZE;   // ...get ready to receive the next Setup token...
+            _USBBD0O.count = MAX_PACKET_SIZE;   // ...get ready to receive the next Setup token...
             _USBBD0I.status = 0x84;
             _USBBD0O.status = 0x84;                 // ...and issue a protocol stall on EP0
         }
@@ -287,7 +373,7 @@ void ProcessSetupToken(void) {
     for (n = 0; n<8; n++) {
         gBufferData[n] = gCurrentBufferDescriptor.address[n];
     }
-    _USBBD0O.bytecount = MAX_PACKET_SIZE;   // reset the EP0 OUT byte count
+    _USBBD0O.count = MAX_PACKET_SIZE;   // reset the EP0 OUT byte count
     _USBBD0I.status = 0x08;         // return the EP0 IN buffer to us (dequeue any pending requests)
     _USBBD0O.status = (!(gBufferData[bmRequestType_OFFSET]&0x80) && (gBufferData[wLengthL_OFFSET] || gBufferData[wLengthH_OFFSET])) ? 0xC8:0x88;   // set EP0 OUT UOWN back to USB and DATA0/DATA1 packet according to the request type
     UCONbits.PKTDIS = 0;            // assuming there is nothing to dequeue, clear the packet disable bit
@@ -332,7 +418,7 @@ void StandardRequests(void) {
                 case RECIPIENT_DEVICE:
                     _USBBD0I.address[0] = gUSBDeviceStatus;
                     _USBBD0I.address[1] = 0x00;
-                    _USBBD0I.bytecount = 0x02;
+                    _USBBD0I.count = 0x02;
                     _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                     break;
                 case RECIPIENT_INTERFACE:
@@ -345,7 +431,7 @@ void StandardRequests(void) {
 #warning need to check here and elsewhere that word values wValue, wIndex, wLength are accessing just high or low byte fOR a rEASON!!
                                 _USBBD0I.address[0] = 0x00;
                                 _USBBD0I.address[1] = 0x00;
-                                _USBBD0I.bytecount = 0x02;
+                                _USBBD0I.count = 0x02;
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             } else {
                                 HandleError();    // set Request Error Flag
@@ -358,7 +444,7 @@ void StandardRequests(void) {
                             if (!(wIndex&0x0F)) {  // get EP, strip off direction bit and see if it is EP0
                                 _USBBD0I.address[0] = ((((wIndex&0x00FF)&0x80) ? _USBBD0I.status:_USBBD0O.status)&0x04)>>2; // return the BSTALL bit of EP0 IN or OUT, whichever was requested
                                 _USBBD0I.address[1] = 0x00;
-                                _USBBD0I.bytecount = 0x02;
+                                _USBBD0I.count = 0x02;
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             } else {
                                 HandleError();    // set Request Error Flag
@@ -371,7 +457,7 @@ void StandardRequests(void) {
                             if (UEP[n]&(((wIndex&0x00FF)&0x80) ? 0x02:0x04)) { // if the specified EP is enabled for transfers in the specified direction...
                                 _USBBD0I.address[0] = ((currentBufferDescriptor->status)&0x04)>>2; // ...return the BSTALL bit of the specified EP
                                 _USBBD0I.address[1] = 0x00;
-                                _USBBD0I.bytecount = 0x02;
+                                _USBBD0I.count = 0x02;
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             } else {
                                 HandleError();    // set Request Error Flag
@@ -395,7 +481,7 @@ void StandardRequests(void) {
                                 gUSBDeviceStatus &= 0xFE;
                             else
                                 gUSBDeviceStatus |= 0x01;
-                            _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
+                            _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
                             _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             break;
                         default:
@@ -406,7 +492,7 @@ void StandardRequests(void) {
                     switch (_USBDeviceState) {
                         case USBDeviceStateAddressed:
                             if (!(wIndex & 0x0F)) {  // get EP, strip off direction bit, and see if its EP0
-                                _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
+                                _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                             } else {
                                 HandleError();    // set Request Error Flag
@@ -431,7 +517,7 @@ void StandardRequests(void) {
                                 }
                             }
                             if (!(gErrorCondition)) {  // if there was no Request Error...
-                                _USBBD0I.bytecount = 0x00;
+                                _USBBD0I.count = 0x00;
                                 _USBBD0I.status = 0xC8;     // ...send packet as DATA1, set UOWN bit
                             }
                             break;
@@ -449,7 +535,7 @@ void StandardRequests(void) {
             } else {
                 _USBEngineStatus |= USBEngineStatusAddressing;  // processing a SET_ADDRESS request
                 gUSBPendingAddress = (wValue&0x00FF);  // save new address
-                _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
+                _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             }
             break;
@@ -508,7 +594,7 @@ void StandardRequests(void) {
             break;
         case GET_CONFIGURATION:
             _USBBD0I.address[0] = gCurrentConfiguration;  // copy current device configuration to EP0 IN buffer
-            _USBBD0I.bytecount = 0x01;
+            _USBBD0I.count = 0x01;
             _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             break;
         case SET_CONFIGURATION:
@@ -535,7 +621,7 @@ void StandardRequests(void) {
                         LATCbits.LATC3 = 1;
 #endif
                 }
-                _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
+                _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             } else {
                 HandleError();    // set Request Error Flag
@@ -546,7 +632,7 @@ void StandardRequests(void) {
                 case USBDeviceStateConfigured:
                     if ((wIndex&0x00FF)<NUM_INTERFACES) {
                         _USBBD0I.address[0] = 0x00; // always send back 0 for bAlternateSetting
-                        _USBBD0I.bytecount = 0x01;
+                        _USBBD0I.count = 0x01;
                         _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                     } else {
                         HandleError();    // set Request Error Flag
@@ -562,7 +648,7 @@ void StandardRequests(void) {
                     if ((wIndex&0x00FF)<NUM_INTERFACES) {
                         switch ((wValue&0x00FF)) {
                             case 0:     // currently support only bAlternateSetting of 0
-                                _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
+                                _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                                 break;
                             default:
@@ -594,12 +680,12 @@ void VendorRequests(void) {
     switch (gBufferData[bRequest_OFFSET]) {
         case SET_RA0:
             PORTAbits.RA0 = 1;      // set RA0 high
-            _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
+            _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
             _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             break;
         case CLR_RA0:
             PORTAbits.RA0 = 0;      // set RA0 low
-            _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
+            _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
             _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             break;
         default:
@@ -641,9 +727,9 @@ void ProcessInToken(void) {
 void ProcessOutToken(void) {
     switch (gCachedUSTAT&0x18) {   // extract the EP bits
         case EP0:
-            _USBBD0O.bytecount = MAX_PACKET_SIZE;
+            _USBBD0O.count = MAX_PACKET_SIZE;
             _USBBD0O.status = 0x88;
-            _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
+            _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
             _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             break;
         case EP1:
@@ -667,7 +753,7 @@ void SendDescriptorPacket(void) {
     for (n = 0; n<gUSBPacketLength; n++) {
         _USBBD0I.address[n] = *gDescriptorToSend++;
     }
-    _USBBD0I.bytecount = gUSBPacketLength;
+    _USBBD0I.count = gUSBPacketLength;
     _USBBD0I.status = ((_USBBD0I.status^0x40)&0x40)|0x88; // toggle the DATA01 bit, clear the PIDs bits, and set the UOWN and DTS bits
 }
 
