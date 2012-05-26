@@ -1,3 +1,5 @@
+#include "DeviceConstants.h"
+
 #define	NUM_CONFIGURATIONS	1
 #define	NUM_INTERFACES		1
 #define NUM_STRINGS			2
@@ -19,6 +21,12 @@
 #define INT_STAT_MASK_TOKEN_DONE	0x04
 #define INT_STAT_MASK_SLEEP	0x08
 #define INT_STAT_MASK_STALL	0x10
+
+// Buffer descriptor status bits
+#define UOWN                (0x80)
+#define DTS                 (0x40)
+#define DTSEN               (0x08)
+#define BSTALL              (0x04)
 
 #define TOKEN_OUT	(0x01<<2)
 #define TOKEN_ACK	(0x02<<2)

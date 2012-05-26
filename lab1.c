@@ -83,8 +83,10 @@ unsigned char gCurrentConfiguration;
 unsigned char gUSBDeviceStatus;
 unsigned char _USBEngineStatus;
 unsigned char gUSBPendingAddress;
-unsigned char rom *gDescriptorToSend;
-unsigned char gUSBBytesLeft;
+unsigned char rom *gDescriptorToSend;   // Remove later
+rom unsigned char *_USBDescriptorToSend;
+unsigned char gUSBBytesLeft;    // Remove later
+unsigned char _USBDescriptorBytesLeft;
 unsigned char gUSBPacketLength;
 unsigned char gCachedUSTAT;
 USBDeviceState _USBDeviceState;
