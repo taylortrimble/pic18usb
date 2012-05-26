@@ -118,49 +118,33 @@
 #define DEVICE_REMOTE_WAKEUP	0x01
 #define ENDPOINT_HALT			0x00
 
-typedef struct BUFDESC {
+typedef struct _USBBufferDescriptor {
 	unsigned char status;
 	unsigned char bytecount;
 	unsigned char *address;
-} BUFDESC;
+} USBBufferDescriptor;
 
 #pragma udata USB_BUFFER_DESCRIPTOR_TABLE=0x0200
-far BUFDESC BD0O;
-far BUFDESC BD0I;
-far BUFDESC BD1O;
-far BUFDESC BD1I;
-far BUFDESC BD2O;
-far BUFDESC BD2I;
-far BUFDESC BD3O;
-far BUFDESC BD3I;
-far BUFDESC BD4O;
-far BUFDESC BD4I;
-far BUFDESC BD5O;
-far BUFDESC BD5I;
-far BUFDESC BD6O;
-far BUFDESC BD6I;
-far BUFDESC BD7O;
-far BUFDESC BD7I;
-far BUFDESC BD8O;
-far BUFDESC BD8I;
-far BUFDESC BD9O;
-far BUFDESC BD9I;
-far BUFDESC BD10O;
-far BUFDESC BD10I;
-far BUFDESC BD11O;
-far BUFDESC BD11I;
-far BUFDESC BD12O;
-far BUFDESC BD12I;
-far BUFDESC BD13O;
-far BUFDESC BD13I;
-far BUFDESC BD14O;
-far BUFDESC BD14I;
-far BUFDESC BD15O;
-far BUFDESC BD15I;
+far USBBufferDescriptor _USBBD0O;
+far USBBufferDescriptor _USBBD0I;
+far USBBufferDescriptor _USBBD1O;
+far USBBufferDescriptor _USBBD1I;
+far USBBufferDescriptor _USBBD2O;
+far USBBufferDescriptor _USBBD2I;
+far USBBufferDescriptor _USBBD3O;
+far USBBufferDescriptor _USBBD3I;
+far USBBufferDescriptor _USBBD4O;
+far USBBufferDescriptor _USBBD4I;
+far USBBufferDescriptor _USBBD5O;
+far USBBufferDescriptor _USBBD5I;
+far USBBufferDescriptor _USBBD6O;
+far USBBufferDescriptor _USBBD6I;
+far USBBufferDescriptor _USBBD7O;
+far USBBufferDescriptor _USBBD7I;
 
 #pragma udata USB_BUFFERS=0x0280
-far unsigned char EP0_OUT_buffer[MAX_PACKET_SIZE];
-far unsigned char EP0_IN_buffer[MAX_PACKET_SIZE];
+far unsigned char _USBEP0OutBuffer[MAX_PACKET_SIZE];
+far unsigned char _USBEP0InBuffer[MAX_PACKET_SIZE];
 
 void ProcessSetupToken(void);
 void ProcessInToken(void);
