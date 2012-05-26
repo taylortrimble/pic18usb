@@ -3,12 +3,6 @@
 #define NUM_STRINGS			2
 #define MAX_PACKET_SIZE		8	// maximum packet size for low-speed peripherals is 8 bytes, for full-speed peripherals it can be 8, 16, 32, or 64 bytes
 
-// Define the states that the USB interface can be in
-#define	POWERED_STATE	0x00
-#define	DEFAULT_STATE	0x01
-#define	ADDRESS_STATE	0x02
-#define	CONFIG_STATE	0x03
-
 // Define the states for Control EndPoints
 #define	EP_IDLE_STATE		0x00
 #define	EP_SETUP_STATE		0x01
@@ -117,6 +111,19 @@
 
 #define DEVICE_REMOTE_WAKEUP	0x01
 #define ENDPOINT_HALT			0x00
+
+typedef enum _USBDeviceState {
+    USBDeviceStateReset,
+    USBDeviceStateInitialized,
+    USBDeviceStateAddressed,
+    USBDeviceStateConfigured
+} USBDeviceState;
+
+typedef enum _USBEngineStatus {
+    USBEngineStatusReset = 0x00,
+    USBEngineStatusAddressing = 0x01,
+    USBEngineStatusSendingDescriptor = 0x02
+} USBEngineStatus;
 
 typedef struct _USBBufferDescriptor {
 	unsigned char status;

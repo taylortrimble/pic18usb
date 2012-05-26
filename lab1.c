@@ -81,13 +81,13 @@ unsigned char gBufferData[8];
 unsigned char gErrorCondition;
 unsigned char gCurrentConfiguration;
 unsigned char gUSBDeviceStatus;
-unsigned char gUSBDeviceRequest;
+unsigned char _USBEngineStatus;
 unsigned char gUSBPendingAddress;
 unsigned char rom *gDescriptorToSend;
 unsigned char gUSBBytesLeft;
 unsigned char gUSBPacketLength;
 unsigned char gCachedUSTAT;
-unsigned char gUSBState;
+USBDeviceState _USBDeviceState;
 
 #pragma romdata
 rom const unsigned char gkDevice[] = {          // Device descriptor
@@ -174,9 +174,9 @@ void InitUSB(void) {
     UCFG = 0x14;                // configure USB for low-speed transfers and to use the on-chip transciever and pull-up resistor
     UCON = 0x08;                // enable the USB module and its supporting circuitry
     gCurrentConfiguration = 0x00;
-    gUSBState = 0x00;         // default to powered state
+    _USBDeviceState = USBDeviceStateReset;         // default to powered state
     gUSBDeviceStatus = 0x01;
-    gUSBDeviceRequest = NO_REQUEST;   // No device requests in process
+    _USBEngineStatus = USBEngineStatusReset;   // No device requests in process
 #ifdef SHOW_ENUM_STATUS
     TRISC = 0x00;               // set all bits of LATC as outputs
     LATC = 0x01;                // set bit zero to indicate Powered status
@@ -203,7 +203,7 @@ void ServiceUSB(void) {
         UCONbits.SUSPND = 0;
 #ifdef SHOW_ENUM_STATUS
         LATC &= 0xE0;
-        LATC |= 0x01<<gUSBState;
+        LATC |= 0x01<<_USBDeviceState;
 #endif
     } else if (UIRbits.STALLIF) {
         UIRbits.STALLIF = 0;
@@ -230,7 +230,7 @@ void ServiceUSB(void) {
         UIR = 0x00;             // clear all the USB interrupt flags
         UEP0 = ENDPT_CONTROL;   // EP0 is a control pipe and requires an ACK
         UEIE = 0xFF;            // enable all error interrupts
-        gUSBState = DEFAULT_STATE;
+        _USBDeviceState = USBDeviceStateInitialized;
         gUSBDeviceStatus = 0x01;   // self powered, remote wakeup disabled
 #ifdef SHOW_ENUM_STATUS
         LATC &= 0xE0;
@@ -289,7 +289,7 @@ void ProcessSetupToken(void) {
     _USBBD0I.status = 0x08;         // return the EP0 IN buffer to us (dequeue any pending requests)
     _USBBD0O.status = (!(gBufferData[bmRequestType]&0x80) && (gBufferData[wLength] || gBufferData[wLengthHigh])) ? 0xC8:0x88;   // set EP0 OUT UOWN back to USB and DATA0/DATA1 packet according to the request type
     UCONbits.PKTDIS = 0;            // assuming there is nothing to dequeue, clear the packet disable bit
-    gUSBDeviceRequest = NO_REQUEST;       // clear the device request in process
+    _USBEngineStatus = USBEngineStatusReset;       // clear the device request in process
     switch (gBufferData[bmRequestType]&0x60) {  // extract request type bits
         case STANDARD:
             StandardRequests();
@@ -320,11 +320,11 @@ void StandardRequests(void) {
                     _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
                     break;
                 case RECIPIENT_INTERFACE:
-                    switch (gUSBState) {
-                        case ADDRESS_STATE:
+                    switch (_USBDeviceState) {
+                        case USBDeviceStateAddressed:
                             HandleError();    // set Request Error Flag
                             break;
-                        case CONFIG_STATE:
+                        case USBDeviceStateConfigured:
                             if (gBufferData[wIndex]<NUM_INTERFACES) {
                                 _USBBD0I.address[0] = 0x00;
                                 _USBBD0I.address[1] = 0x00;
@@ -336,8 +336,8 @@ void StandardRequests(void) {
                     }
                     break;
                 case RECIPIENT_ENDPOINT:
-                    switch (gUSBState) {
-                        case ADDRESS_STATE:
+                    switch (_USBDeviceState) {
+                        case USBDeviceStateAddressed:
                             if (!(gBufferData[wIndex]&0x0F)) {  // get EP, strip off direction bit and see if it is EP0
                                 _USBBD0I.address[0] = (((gBufferData[wIndex]&0x80) ? _USBBD0I.status:_USBBD0O.status)&0x04)>>2; // return the BSTALL bit of EP0 IN or OUT, whichever was requested
                                 _USBBD0I.address[1] = 0x00;
@@ -347,7 +347,7 @@ void StandardRequests(void) {
                                 HandleError();    // set Request Error Flag
                             }
                             break;
-                        case CONFIG_STATE:
+                        case USBDeviceStateConfigured:
                             UEP = (unsigned char *)&UEP0;
                             n = gBufferData[wIndex]&0x0F;   // get EP and strip off direction bit for offset from UEP0
                             currentBufferDescriptor = &_USBBD0O+((n<<1)|((gBufferData[wIndex]&0x80) ? 0x01:0x00)); // compute pointer to the buffer descriptor for the specified EP
@@ -386,8 +386,8 @@ void StandardRequests(void) {
                     }
                     break;
                 case RECIPIENT_ENDPOINT:
-                    switch (gUSBState) {
-                        case ADDRESS_STATE:
+                    switch (_USBDeviceState) {
+                        case USBDeviceStateAddressed:
                             if (!(gBufferData[wIndex]&0x0F)) {  // get EP, strip off direction bit, and see if its EP0
                                 _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
                                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
@@ -395,7 +395,7 @@ void StandardRequests(void) {
                                 HandleError();    // set Request Error Flag
                             }
                             break;
-                        case CONFIG_STATE:
+                        case USBDeviceStateConfigured:
                             UEP = (unsigned char *)&UEP0;
                             if (n = gBufferData[wIndex]&0x0F) { // get EP and strip off direction bit for offset from UEP0, if not EP0...
                                 currentBufferDescriptor = &_USBBD0O+((n<<1)|((gBufferData[wIndex]&0x80) ? 0x01:0x00)); // compute pointer to the buffer descriptor for the specified EP
@@ -430,14 +430,14 @@ void StandardRequests(void) {
             if (gBufferData[wValue]>0x7F) { // if new device address is illegal, send Request Error
                 HandleError();    // set Request Error Flag
             } else {
-                gUSBDeviceRequest = SET_ADDRESS;  // processing a SET_ADDRESS request
+                _USBEngineStatus |= USBEngineStatusAddressing;  // processing a SET_ADDRESS request
                 gUSBPendingAddress = gBufferData[wValue];  // save new address
                 _USBBD0I.bytecount = 0x00;      // set EP0 IN byte count to 0
                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             }
             break;
         case GET_DESCRIPTOR:
-            gUSBDeviceRequest = GET_DESCRIPTOR;   // processing a GET_DESCRIPTOR request
+            _USBEngineStatus |= USBEngineStatusSendingDescriptor;   // readying a GET_DESCRIPTOR request
             switch (gBufferData[wValueHigh]) {
                 case DEVICE:
                     gDescriptorToSend = gkDevice;
@@ -505,14 +505,14 @@ void StandardRequests(void) {
                 UEP7 = 0x00;
                 switch (gCurrentConfiguration = gBufferData[wValue]) {
                     case 0:
-                        gUSBState = ADDRESS_STATE;
+                        _USBDeviceState = USBDeviceStateAddressed;
 #ifdef SHOW_ENUM_STATUS
                         LATC &= 0xE0;
                         LATCbits.LATC2 = 1;
 #endif
                         break;
                     default:
-                        gUSBState = CONFIG_STATE;
+                        _USBDeviceState = USBDeviceStateConfigured;
 #ifdef SHOW_ENUM_STATUS
                         LATC &= 0xE0;
                         LATCbits.LATC3 = 1;
@@ -525,8 +525,8 @@ void StandardRequests(void) {
             }
             break;
         case GET_INTERFACE:
-            switch (gUSBState) {
-                case CONFIG_STATE:
+            switch (_USBDeviceState) {
+                case USBDeviceStateConfigured:
                     if (gBufferData[wIndex]<NUM_INTERFACES) {
                         _USBBD0I.address[0] = 0x00; // always send back 0 for bAlternateSetting
                         _USBBD0I.bytecount = 0x01;
@@ -540,8 +540,8 @@ void StandardRequests(void) {
             }
             break;
         case SET_INTERFACE:
-            switch (gUSBState) {
-                case CONFIG_STATE:
+            switch (_USBDeviceState) {
+                case USBDeviceStateConfigured:
                     if (gBufferData[wIndex]<NUM_INTERFACES) {
                         switch (gBufferData[wValue]) {
                             case 0:     // currently support only bAlternateSetting of 0
@@ -593,27 +593,27 @@ void VendorRequests(void) {
 void ProcessInToken(void) {
     switch (gCachedUSTAT&0x18) {   // extract the EP bits
         case EP0:
-            switch (gUSBDeviceRequest) {
-                case SET_ADDRESS:
-                    switch (UADDR = gUSBPendingAddress) {
-                        case 0:
-                            gUSBState = DEFAULT_STATE;
+            if (_USBEngineStatus & USBEngineStatusAddressing) {
+                switch (UADDR = gUSBPendingAddress) {
+                    case 0:
+                        _USBDeviceState = USBDeviceStateInitialized;
 #ifdef SHOW_ENUM_STATUS
-                            LATC &= 0xE0;
-                            LATCbits.LATC1 = 1;
+                        LATC &= 0xE0;
+                        LATCbits.LATC1 = 1;
 #endif
-                            break;
-                        default:
-                            gUSBState = ADDRESS_STATE;
+                        break;
+                    default:
+                        _USBDeviceState = USBDeviceStateAddressed;
 #ifdef SHOW_ENUM_STATUS
-                            LATC &= 0xE0;
-                            LATCbits.LATC2 = 1;
+                        LATC &= 0xE0;
+                        LATCbits.LATC2 = 1;
 #endif
-                    }
-                    break;
-                case GET_DESCRIPTOR:
-                    SendDescriptorPacket();
-                    break;
+                }
+                _USBEngineStatus &= ~USBEngineStatusAddressing;
+            } else if (_USBEngineStatus & USBEngineStatusSendingDescriptor) {
+                SendDescriptorPacket();
+            } else {
+                HandleError();
             }
             break;
         case EP1:
@@ -642,7 +642,7 @@ void SendDescriptorPacket(void) {
     unsigned char n;
 
     if (gUSBBytesLeft<MAX_PACKET_SIZE) {
-        gUSBDeviceRequest = NO_REQUEST;   // sending a short packet, so clear device request
+        _USBEngineStatus &= ~USBEngineStatusSendingDescriptor;   // sending a short packet, no longer sending after this
         gUSBPacketLength = gUSBBytesLeft;
         gUSBBytesLeft = 0x00;
     } else {
