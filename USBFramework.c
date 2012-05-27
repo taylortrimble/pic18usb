@@ -254,11 +254,33 @@ void _USBWriteSingleDescriptor(rom const unsigned char *descriptor)
 
 void _USBProcessEP0(void)
 {
+    USBBufferDescriptor *bufferDescriptor;
+    unsigned char *bufferAddress;
     USBToken transactionToken;
+    unsigned char bRequest;
+    unsigned char bmRequestType;
+    unsigned wValue;
+    unsigned wIndex;
+
     transactionToken = (gCurrentBufferDescriptor.status&0x3C)>>2;
 
     switch (transactionToken) {  // extract PID bits
         case USBTokenSETUP:
+            // SETUP token processing
+            bufferAddress = bufferDescriptor->address;
+            bRequest = bufferAddress[bRequest_OFFSET];
+            bmRequestType = bufferAddress[bmRequestType_OFFSET];
+            wValue = bufferAddress[wValueL_OFFSET] + (bufferAddress[wValueH_OFFSET])*0x100;
+            wIndex = bufferAddress[wIndexL_OFFSET] + (bufferAddress[wIndexH_OFFSET])*0x100;
+
+            // Reset OUT endpoint, dequeue any IN packets, and re-enable packet transfers
+            _USBBD0O.status = ((!(bmRequestType&HOST_TO_DEVICE)&&wValue) ? (UOWN|DTS|DTSEN) : (UOWN|DTSEN)); // Choose correct DATA0/DATA1
+            _USBBD0O.count = EP0_SIZE;
+            _USBBD0I.status = DTSEN;   // steal UOWN to dequeue IN packets
+            UCONbits.PKTDIS = 0;
+            _USBEngineStatus = USBEngineStatusReset;
+
+            // Move more up after testing/commit. The above is a combination of my code and Brad Minch's.
             ProcessSetupToken();
             break;
         case USBTokenIN:
@@ -395,11 +417,7 @@ void ProcessSetupToken(void) {
     for (n = 0; n<8; n++) {
         gBufferData[n] = gCurrentBufferDescriptor.address[n];
     }
-    _USBBD0O.count = MAX_PACKET_SIZE;   // reset the EP0 OUT byte count
-    _USBBD0I.status = 0x08;         // return the EP0 IN buffer to us (dequeue any pending requests)
-    _USBBD0O.status = (!(gBufferData[bmRequestType_OFFSET]&0x80) && (gBufferData[wLengthL_OFFSET] || gBufferData[wLengthH_OFFSET])) ? 0xC8:0x88;   // set EP0 OUT UOWN back to USB and DATA0/DATA1 packet according to the request type
-    UCONbits.PKTDIS = 0;            // assuming there is nothing to dequeue, clear the packet disable bit
-    _USBEngineStatus = USBEngineStatusReset;       // clear the device request in process
+
     switch (gBufferData[bmRequestType_OFFSET]&0x60) {  // extract request type bits
         case STANDARD:
             StandardRequests();
