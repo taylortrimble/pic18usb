@@ -414,6 +414,24 @@ void _USBProcessEP0(void)
                         _USBHandleControlError();
                     }
                     break;
+
+                case GET_DESCRIPTOR:
+                    // Device only (bmRequestType)
+                    switch ((wValue>>8)&0x00FF) { // High byte contains descriptor type
+                        case DEVICE:
+                            _USBWriteSingleDescriptor(_USBDeviceDescriptor);
+                            break;
+                        case CONFIGURATION:
+                            _USBWriteDescriptor(_USBConfigurationDescriptors[wValue&0x00FF], (_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthL_OFFSET]+((_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthH_OFFSET])*0x100);
+                            break;
+                        case STRING:
+                            _USBWriteSingleDescriptor(_USBStringDescriptors[wValue]);
+                            break;
+                        default:
+                            _USBHandleControlError();
+                            break;
+                    }
+                    break;
                 case GET_CONFIGURATION:
                     // Device only
                     _USBWriteValue(_USBCurrentConfiguration, 1);
@@ -443,27 +461,6 @@ void _USBProcessEP0(void)
                         _USBHandleControlError();
                     }
                     break;
-                case GET_DESCRIPTOR:
-                    // Device only (bmRequestType)
-                    switch ((wValue>>8)&0x00FF) { // High byte contains descriptor type
-                        case DEVICE:
-                            _USBWriteSingleDescriptor(_USBDeviceDescriptor);
-                            break;
-
-                        case CONFIGURATION:
-                            _USBWriteDescriptor(_USBConfigurationDescriptors[wValue&0x00FF], (_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthL_OFFSET]+((_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthH_OFFSET])*0x100);
-                            break;
-
-                        case STRING:
-                            _USBWriteSingleDescriptor(_USBStringDescriptors[wValue]);
-                            break;
-
-                        default:
-                            _USBHandleControlError();
-                            break;
-                    }
-                    break;
-
                 case GET_INTERFACE:
                     switch (_USBDeviceState) {
                         case USBDeviceStateConfigured:
