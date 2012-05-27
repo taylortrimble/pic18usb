@@ -162,6 +162,7 @@ void _USBWriteValue(unsigned value, unsigned char bytes);
 void _USBSendDescriptor(void);
 void _USBWriteDescriptor(rom const unsigned char *descriptor, unsigned char bytes);
 void _USBWriteSingleDescriptor(rom const unsigned char *descriptor);
+void _USBProcessEP0(void);
 void InitUSB(void);
 void ServiceUSB(void);
 void ProcessSetupToken(void);
@@ -252,6 +253,27 @@ void _USBWriteSingleDescriptor(rom const unsigned char *descriptor)
     _USBWriteDescriptor(descriptor, descriptor[bLength_OFFSET]);
 }
 
+void _USBProcessEP0(void)
+{
+    USBToken transactionToken;
+    transactionToken = (gCurrentBufferDescriptor.status&0x3C)>>2;
+
+    switch (transactionToken) {  // extract PID bits
+        case USBTokenSETUP:
+            ProcessSetupToken();
+            break;
+        case USBTokenIN:
+            ProcessInToken();
+            break;
+        case USBTokenOUT:
+            ProcessOutToken();
+            break;
+        default:
+            _USBHandleControlError();
+            break;
+    }
+}
+
 void InitUSB(void) {
     UIE = 0x00;                 // mask all USB interrupts
     UIR = 0x00;                 // clear all USB interrupt flags
@@ -339,16 +361,7 @@ void ServiceUSB(void) {
                 LATC ^= 0x80;
         }
 #endif
-        switch (gCurrentBufferDescriptor.status&0x3C) {  // extract PID bits
-            case TOKEN_SETUP:
-                ProcessSetupToken();
-                break;
-            case TOKEN_IN:
-                ProcessInToken();
-                break;
-            case TOKEN_OUT:
-                ProcessOutToken();
-        }
+        _USBProcessEP0();
     }
 }
 
