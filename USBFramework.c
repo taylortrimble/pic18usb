@@ -81,7 +81,7 @@ unsigned char gBufferData[8];
 unsigned char gCurrentConfiguration;
 unsigned char gUSBDeviceStatus;
 unsigned char _USBEngineStatus;
-unsigned char gUSBPendingAddress;
+unsigned char _USBPendingDeviceAddress;
 rom unsigned char *_USBDescriptorToSend;
 unsigned char _USBDescriptorBytesLeft;
 unsigned char gUSBPacketLength;
@@ -532,7 +532,7 @@ void StandardRequests(void) {
                 _USBHandleControlError();    // set Request Error Flag
             } else {
                 _USBEngineStatus |= USBEngineStatusAddressing;  // processing a SET_ADDRESS request
-                gUSBPendingAddress = (wValue&0x00FF);  // save new address
+                _USBPendingDeviceAddress = (wValue&0x00FF);  // save new address
                 _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
                 _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             }
@@ -676,7 +676,7 @@ void ProcessInToken(void) {
     switch (gCachedUSTAT&0x18) {   // extract the EP bits
         case EP0:
             if (_USBEngineStatus & USBEngineStatusAddressing) {
-                switch (UADDR = gUSBPendingAddress) {
+                switch (UADDR = _USBPendingDeviceAddress) {
                     case 0:
                         _USBDeviceState = USBDeviceStateInitialized;
 #ifdef SHOW_ENUM_STATUS
