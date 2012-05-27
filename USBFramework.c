@@ -78,7 +78,7 @@
 
 #pragma udata
 USBBufferDescriptor gCurrentBufferDescriptor;
-unsigned char gCurrentConfiguration;
+unsigned char _USBCurrentConfiguration;
 USBDeviceStatus _USBDeviceStatus;
 unsigned char _USBEngineStatus;
 unsigned char _USBPendingDeviceAddress;
@@ -437,9 +437,8 @@ void _USBProcessEP0(void)
                     }
                     break;
                 case GET_CONFIGURATION:
-                    _USBBD0I.address[0] = gCurrentConfiguration;  // copy current device configuration to EP0 IN buffer
-                    _USBBD0I.count = 0x01;
-                    _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
+                    // Device only
+                    _USBWriteValue(_USBCurrentConfiguration, 1);
                     break;
                 case SET_CONFIGURATION:
                     if ((wValue&0x00FF)<=NUM_CONFIGURATIONS) {
@@ -450,7 +449,7 @@ void _USBProcessEP0(void)
                         UEP5 = 0x00;
                         UEP6 = 0x00;
                         UEP7 = 0x00;
-                        switch (gCurrentConfiguration = (wValue&0x00FF)) {
+                        switch (_USBCurrentConfiguration = (wValue&0x00FF)) {
                             case 0:
                                 _USBDeviceState = USBDeviceStateAddressed;
 #ifdef SHOW_ENUM_STATUS
@@ -554,7 +553,7 @@ void InitUSB(void) {
     UIR = 0x00;                 // clear all USB interrupt flags
     UCFG = 0x14;                // configure USB for low-speed transfers and to use the on-chip transciever and pull-up resistor
     UCON = 0x08;                // enable the USB module and its supporting circuitry
-    gCurrentConfiguration = 0x00;
+    _USBCurrentConfiguration = 0x00;
     _USBDeviceState = USBDeviceStateReset;         // default to powered state
     _USBDeviceStatus = 0x01;
     _USBEngineStatus = USBEngineStatusReset;   // No device requests in process
@@ -589,7 +588,7 @@ void ServiceUSB(void) {
     } else if (UIRbits.STALLIF) {
         UIRbits.STALLIF = 0;
     } else if (UIRbits.URSTIF) {
-        gCurrentConfiguration = 0x00;
+        _USBCurrentConfiguration = 0x00;
         UIRbits.TRNIF = 0;      // clear TRNIF four times to clear out the USTAT FIFO
         UIRbits.TRNIF = 0;
         UIRbits.TRNIF = 0;
