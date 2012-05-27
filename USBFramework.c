@@ -166,6 +166,8 @@ rom const rom const unsigned char *_USBStringDescriptors[] = {
 };
 
 #pragma code
+void HighPriorityISR(void);
+void LowPriorityISR(void);
 void _USBHandleControlError(void);
 void _USBResetEP0InBuffer(void);
 void _USBWriteValue(unsigned value, unsigned char bytes);
@@ -175,6 +177,24 @@ void _USBWriteSingleDescriptor(rom const unsigned char *descriptor);
 void _USBProcessEP0(void);
 void InitUSB(void);
 void ServiceUSB(void);
+
+// Interrupt service routines
+#pragma code __HIGH_PRIORITY_ISR__=0x0008
+void _high_priority_isr(void) {_asm goto HighPriorityISR _endasm}
+#pragma code __LOW_PRIORITY_ISR__=0x0018
+void _low_priority_isr(void) {_asm goto LowPriorityISR _endasm}
+
+#pragma interrupt HighPriorityISR
+void HighPriorityISR(void)
+{
+    // High interrupt service routine
+}
+
+#pragma interruptlow LowPriorityISR
+void LowPriorityISR(void)
+{
+    // Low interrupt service routine
+}
 
 void _USBHandleControlError(void)
 {
