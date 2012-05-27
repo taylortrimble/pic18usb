@@ -90,7 +90,7 @@ unsigned char gCachedUSTAT;
 USBDeviceState _USBDeviceState;
 
 #pragma romdata
-rom const unsigned char gkDevice[] = {          // Device descriptor
+rom const unsigned char _USBDeviceDescriptor[] = {
     0x12,               // bLength
     DEVICE,             // bDescriptorType
     0x10,               // bcdUSB (low byte)
@@ -111,7 +111,7 @@ rom const unsigned char gkDevice[] = {          // Device descriptor
     NUM_CONFIGURATIONS  // bNumConfigurations
 };
 
-rom const unsigned char gkConfiguration1[] = {  // Single configuration descriptor (index 0)
+rom const unsigned char _USBConfigurationDescriptor[] = {
     0x09,               // bLength
     CONFIGURATION,      // bDescriptorType
     0x12,               // wTotalLength (low byte)
@@ -132,14 +132,18 @@ rom const unsigned char gkConfiguration1[] = {  // Single configuration descript
     0x00                // iInterface (none)
 };
 
-rom const unsigned char gkString0[] = {         // LangID (special string at index 0)
+rom const rom const unsigned char *_USBConfigurationDescriptors[] = {
+    _USBConfigurationDescriptor
+};
+
+rom const unsigned char _USBLangIDStringDescriptor[] = {    // LangID (special string descriptor at index 0)
     0x04,               // bLength
     STRING,             // bDescriptorType
     0x09,               // wLANGID[0] (low byte)
     0x04                // wLANGID[0] (high byte)
 };
 
-rom const unsigned char gkString1[] = {         // Manufacturer string
+rom const unsigned char _USBManufacturerStringDescriptor[] = {
     0x36,               // bLength
     STRING,             // bDescriptorType
     'M', 0x00, 'i', 0x00, 'c', 0x00, 'r', 0x00, 'o', 0x00, 'c', 0x00, 'h', 0x00, 'i', 0x00, 'p', 0x00, ' ', 0x00,
@@ -147,13 +151,19 @@ rom const unsigned char gkString1[] = {         // Manufacturer string
     'I', 0x00, 'n', 0x00, 'c', 0x00, '.', 0x00
 };
 
-rom const unsigned char gkString2[] = {         // Device string
+rom const unsigned char _USBDeviceStringDescriptor[] = {
     0x44,               // bLength
     STRING,             // bDescriptorType
     'E', 0x00, 'N', 0x00, 'G', 0x00, 'R', 0x00, ' ', 0x00, '2', 0x00, '2', 0x00, '1', 0x00, '0', 0x00, ' ', 0x00,
     'P', 0x00, 'I', 0x00, 'C', 0x00, '1', 0x00, '8', 0x00, 'F', 0x00, '2', 0x00, '4', 0x00, '5', 0x00, '5', 0x00, ' ', 0x00,
     'U', 0x00, 'S', 0x00, 'B', 0x00, ' ', 0x00,
     'F', 0x00, 'i', 0x00, 'r', 0x00, 'm', 0x00, 'w', 0x00, 'a', 0x00, 'r', 0x00, 'e', 0x00
+};
+
+rom const rom const unsigned char *_USBStringDescriptors[] = {
+    _USBLangIDStringDescriptor,
+    _USBManufacturerStringDescriptor,
+    _USBDeviceStringDescriptor
 };
 
 #pragma code
@@ -408,31 +418,19 @@ void _USBProcessEP0(void)
                     _USBEngineStatus |= USBEngineStatusSendingDescriptor;   // readying a GET_DESCRIPTOR request
                     switch ((wValue>>8)&0x00FF) {       // High byte indicates which type of descriptor to return
                         case DEVICE:
-                            _USBWriteSingleDescriptor(gkDevice);
+                            _USBWriteSingleDescriptor(_USBDeviceDescriptor);
                             break;
                         case CONFIGURATION:
                             switch (wValue & 0x00FF) {
                                 case 0:
-                                    _USBWriteDescriptor(gkConfiguration1, gkConfiguration1[2]+0x100*gkConfiguration1[3]);
+                                    _USBWriteDescriptor(_USBConfigurationDescriptors[0], (_USBConfigurationDescriptors[0])[2]+0x100*(_USBConfigurationDescriptors[0])[3]);
                                     break;
                                 default:
                                     _USBHandleControlError();    // set Request Error Flag
                             }
                             break;
                         case STRING:
-                            switch (wValue & 0x00FF) {
-                                case 0:
-                                    _USBWriteSingleDescriptor(gkString0);
-                                    break;
-                                case 1:
-                                    _USBWriteSingleDescriptor(gkString1);
-                                    break;
-                                case 2:
-                                    _USBWriteSingleDescriptor(gkString2);
-                                    break;
-                                default:
-                                    _USBHandleControlError();    // set Request Error Flag
-                            }
+                            _USBWriteSingleDescriptor(_USBStringDescriptors[wValue]);
                             break;
                         default:
                             _USBHandleControlError();    // set Request Error Flag
