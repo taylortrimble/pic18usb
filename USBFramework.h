@@ -133,7 +133,8 @@
 #define USB_ENDPOINT_REQUEST    0x02
 
 #define DEVICE_REMOTE_WAKEUP	0x01
-#define ENDPOINT_HALT			0x00
+#define TEST_MODE               0x02
+#define ENDPOINT_HALT           0x00
 
 typedef enum _USBDeviceState {
     USBDeviceStateReset,
@@ -141,6 +142,11 @@ typedef enum _USBDeviceState {
     USBDeviceStateAddressed,
     USBDeviceStateConfigured
 } USBDeviceState;
+
+typedef enum _USBDeviceStatus {
+    USBDeviceStatusTestMode =           0x01,
+    USBDeviceStatusDeviceRemoteWakeup = 0x02,
+} USBDeviceStatus;
 
 typedef enum _USBEngineStatus {
     USBEngineStatusReset = 0x00,

@@ -79,7 +79,7 @@
 #pragma udata
 USBBufferDescriptor gCurrentBufferDescriptor;
 unsigned char gCurrentConfiguration;
-unsigned char _USBDeviceStatus;
+USBDeviceStatus _USBDeviceStatus;
 unsigned char _USBEngineStatus;
 unsigned char _USBPendingDeviceAddress;
 rom unsigned char *_USBDescriptorToSend;
@@ -324,6 +324,46 @@ void _USBProcessEP0(void)
                     }
                     break;
                 case CLEAR_FEATURE:
+                    switch (bmRequestType) {
+                        case USB_DEVICE_REQUEST:
+                            switch (wValue) {
+                                case DEVICE_REMOTE_WAKEUP:
+                                    _USBDeviceStatus &= ~USBDeviceStatusDeviceRemoteWakeup;
+                                    _USBResetEP0InBuffer();
+                                    break;
+
+                                case TEST_MODE:
+                                    _USBDeviceStatus &= ~USBDeviceStatusTestMode;
+                                    _USBResetEP0InBuffer();
+                                    break;
+
+                                default:
+                                    _USBHandleControlError();
+                                    break;
+                            }
+                            break;
+
+                        case USB_ENDPOINT_REQUEST:
+                            if (_USBDeviceState == USBDeviceStateAddressed) {
+                                _USBResetEP0InBuffer();
+                            } else if (_USBDeviceState == USBDeviceStateConfigured) {
+                                if (*(&UEP0+(wIndex&0x000F)) & (wIndex&0x80?EPINEN:EPOUTEN)) {  // If endpoint is enabled in specified directiong
+                                    *(unsigned char *)(0x200+((wIndex&0x000F)*0x08)+((wIndex&0x0080)*0x04)) = 0x00; // Clear endpoint descriptor
+                                } else {
+                                    _USBResetEP0InBuffer();
+                                }
+                            } else {
+                                _USBHandleControlError();
+                            }
+                            break;
+
+                        case USB_INTERFACE_REQUEST: // Should never happen
+                        default:
+                            _USBHandleControlError();
+                            break;
+                    }
+                    break;
+                    
                 case SET_FEATURE:
                     switch (bmRequestType&0x1F) {  // extract request recipient bits
                         case RECIPIENT_DEVICE:
