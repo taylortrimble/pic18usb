@@ -62,6 +62,10 @@
 #define bLength_OFFSET             (0)
 #define bDescriptorType_OFFSET     (1)
 
+// Endpoint configuration bits
+#define EPOUTEN     (0x04)
+#define EPINEN      (0x02)
+
 // Standard USB requests
 #define NO_REQUEST		0xFF
 #define	GET_STATUS		0x00
@@ -123,6 +127,10 @@
 #define RECIPIENT_DEVICE	0x00
 #define RECIPIENT_INTERFACE	0x01
 #define RECIPIENT_ENDPOINT	0x02
+
+#define USB_DEVICE_REQUEST      0x00
+#define USB_INTERFACE_REQUEST   0x01
+#define USB_ENDPOINT_REQUEST    0x02
 
 #define DEVICE_REMOTE_WAKEUP	0x01
 #define ENDPOINT_HALT			0x00
