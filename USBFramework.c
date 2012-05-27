@@ -71,6 +71,7 @@
 #pragma config DEBUG  = OFF
 
 #define SHOW_ENUM_STATUS
+#define UPDATE_ENUM_STATUS(status) LATC=(1<<status);
 
 #define SET_RA0         0x01        // vendor-specific request to set RA0 to high
 #define CLR_RA0         0x02        // vendor-specific request to set RA0 to low
@@ -166,7 +167,6 @@ void _USBProcessEP0(void);
 void InitUSB(void);
 void ServiceUSB(void);
 void ProcessSetupToken(void);
-void ProcessInToken(void);
 void ProcessStandardRequests(void);
 void ProcessClassRequests(void);
 void ProcessVendorRequests(void);
@@ -262,7 +262,27 @@ void _USBProcessEP0(void)
             ProcessSetupToken();
             break;
         case USBTokenIN:
-            ProcessInToken();
+            // A pending USB address is committed on an IN token
+            if (_USBEngineStatus & USBEngineStatusAddressing) {
+                UADDR = _USBPendingDeviceAddress;
+                switch (UADDR) {
+                    case 0:
+                        _USBDeviceState |= USBDeviceStateInitialized;
+                        UPDATE_ENUM_STATUS(_USBDeviceState);
+                        break;
+
+                    default:
+                        _USBDeviceState = USBDeviceStateAddressed;
+                        UPDATE_ENUM_STATUS(_USBDeviceState);
+                        break;
+                }
+                _USBEngineStatus &= ~USBEngineStatusAddressing;
+            }
+
+            // Continue sending any unfinished descriptor transmission
+            else if (_USBEngineStatus & USBEngineStatusSendingDescriptor) {
+                _USBSendDescriptor();
+            }
             break;
         case USBTokenOUT:
             // Any OUT token means no more IN tokens are necessary
@@ -669,37 +689,6 @@ void VendorRequests(void) {
             break;
         default:
             _USBHandleControlError();    // set Request Error Flag
-    }
-}
-
-void ProcessInToken(void) {
-    switch (gCachedUSTAT&0x18) {   // extract the EP bits
-        case EP0:
-            if (_USBEngineStatus & USBEngineStatusAddressing) {
-                switch (UADDR = _USBPendingDeviceAddress) {
-                    case 0:
-                        _USBDeviceState = USBDeviceStateInitialized;
-#ifdef SHOW_ENUM_STATUS
-                        LATC &= 0xE0;
-                        LATCbits.LATC1 = 1;
-#endif
-                        break;
-                    default:
-                        _USBDeviceState = USBDeviceStateAddressed;
-#ifdef SHOW_ENUM_STATUS
-                        LATC &= 0xE0;
-                        LATCbits.LATC2 = 1;
-#endif
-                }
-                _USBEngineStatus &= ~USBEngineStatusAddressing;
-            } else if (_USBEngineStatus & USBEngineStatusSendingDescriptor) {
-                _USBSendDescriptor();
-            }
-            break;
-        case EP1:
-            break;
-        case EP2:
-            break;
     }
 }
 
