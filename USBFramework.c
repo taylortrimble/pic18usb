@@ -414,6 +414,35 @@ void _USBProcessEP0(void)
                         _USBHandleControlError();
                     }
                     break;
+                case GET_CONFIGURATION:
+                    // Device only
+                    _USBWriteValue(_USBCurrentConfiguration, 1);
+                    break;
+                case SET_CONFIGURATION:
+                    // Device only
+                    if (wValue <= NUMBER_OF_CONFIGURATIONS) {
+                        _USBCurrentConfiguration = wValue;
+                        // Disable all endpoints except 0
+#warning must update so that other endpoints are to work later
+                        UEP1 = 0x00;
+                        UEP2 = 0x00;
+                        UEP3 = 0x00;
+                        UEP4 = 0x00;
+                        UEP5 = 0x00;
+                        UEP6 = 0x00;
+                        UEP7 = 0x00;
+                        if (_USBCurrentConfiguration == 0) {
+                            _USBDeviceState |= USBDeviceStateAddressed;
+                            LATC = 0b0100;
+                        } else {
+                            _USBDeviceState = USBDeviceStateConfigured;
+                            LATC = 0b1000;
+                        }
+                        _USBResetEP0InBuffer();
+                    } else {
+                        _USBHandleControlError();
+                    }
+                    break;
                 case GET_DESCRIPTOR:
                     _USBEngineStatus |= USBEngineStatusSendingDescriptor;   // readying a GET_DESCRIPTOR request
                     switch ((wValue>>8)&0x00FF) {       // High byte indicates which type of descriptor to return
@@ -436,40 +465,7 @@ void _USBProcessEP0(void)
                             _USBHandleControlError();    // set Request Error Flag
                     }
                     break;
-                case GET_CONFIGURATION:
-                    // Device only
-                    _USBWriteValue(_USBCurrentConfiguration, 1);
-                    break;
-                case SET_CONFIGURATION:
-                    if ((wValue&0x00FF)<=NUM_CONFIGURATIONS) {
-                        UEP1 = 0x00;    // clear all EP control registers except for EP0 to disable EP1-EP15 prior to setting configuration
-                        UEP2 = 0x00;
-                        UEP3 = 0x00;
-                        UEP4 = 0x00;
-                        UEP5 = 0x00;
-                        UEP6 = 0x00;
-                        UEP7 = 0x00;
-                        switch (_USBCurrentConfiguration = (wValue&0x00FF)) {
-                            case 0:
-                                _USBDeviceState = USBDeviceStateAddressed;
-#ifdef SHOW_ENUM_STATUS
-                                LATC &= 0xE0;
-                                LATCbits.LATC2 = 1;
-#endif
-                                break;
-                            default:
-                                _USBDeviceState = USBDeviceStateConfigured;
-#ifdef SHOW_ENUM_STATUS
-                                LATC &= 0xE0;
-                                LATCbits.LATC3 = 1;
-#endif
-                        }
-                        _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
-                        _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
-                    } else {
-                        _USBHandleControlError();    // set Request Error Flag
-                    }
-                    break;
+
                 case GET_INTERFACE:
                     switch (_USBDeviceState) {
                         case USBDeviceStateConfigured:
