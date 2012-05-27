@@ -405,13 +405,13 @@ void _USBProcessEP0(void)
                     }
                     break;
                 case SET_ADDRESS:
-                    if ((wValue&0x00FF)>0x7F) { // if new device address is illegal, send Request Error
-                        _USBHandleControlError();    // set Request Error Flag
+                    // Device only
+                    if (wValue <= 127) {
+                        _USBEngineStatus |= USBEngineStatusAddressing;
+                        _USBPendingDeviceAddress = wValue;
+                        _USBResetEP0InBuffer();
                     } else {
-                        _USBEngineStatus |= USBEngineStatusAddressing;  // processing a SET_ADDRESS request
-                        _USBPendingDeviceAddress = (wValue&0x00FF);  // save new address
-                        _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
-                        _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
+                        _USBHandleControlError();
                     }
                     break;
                 case GET_DESCRIPTOR:
