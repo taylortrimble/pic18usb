@@ -167,7 +167,6 @@ void InitUSB(void);
 void ServiceUSB(void);
 void ProcessSetupToken(void);
 void ProcessInToken(void);
-void ProcessOutToken(void);
 void ProcessStandardRequests(void);
 void ProcessClassRequests(void);
 void ProcessVendorRequests(void);
@@ -266,7 +265,12 @@ void _USBProcessEP0(void)
             ProcessInToken();
             break;
         case USBTokenOUT:
-            ProcessOutToken();
+            // Any OUT token means no more IN tokens are necessary
+            _USBResetEP0InBuffer();
+
+            // Also reset the OUT Buffer; no OUT tokens required for EP0
+            _USBBD0O.status = (UOWN|DTSEN); // SIE owns BD, data toggle enabled
+            _USBBD0O.count = EP0_SIZE;      // Allow to receive full packet
             break;
         default:
             _USBHandleControlError();
@@ -691,21 +695,6 @@ void ProcessInToken(void) {
             } else if (_USBEngineStatus & USBEngineStatusSendingDescriptor) {
                 _USBSendDescriptor();
             }
-            break;
-        case EP1:
-            break;
-        case EP2:
-            break;
-    }
-}
-
-void ProcessOutToken(void) {
-    switch (gCachedUSTAT&0x18) {   // extract the EP bits
-        case EP0:
-            _USBBD0O.count = MAX_PACKET_SIZE;
-            _USBBD0O.status = 0x88;
-            _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
-            _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
             break;
         case EP1:
             break;
