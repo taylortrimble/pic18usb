@@ -462,44 +462,35 @@ void _USBProcessEP0(void)
                     }
                     break;
                 case GET_INTERFACE:
-                    switch (_USBDeviceState) {
-                        case USBDeviceStateConfigured:
-                            if ((wIndex&0x00FF)<NUM_INTERFACES) {
-                                _USBBD0I.address[0] = 0x00; // always send back 0 for bAlternateSetting
-                                _USBBD0I.count = 0x01;
-                                _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
-                            } else {
-                                _USBHandleControlError();    // set Request Error Flag
-                            }
-                            break;
-                        default:
-                            _USBHandleControlError();    // set Request Error Flag
+                    // Interface only
+                    if ((_USBDeviceState == USBDeviceStateConfigured) && (wIndex < NUMBER_OF_USB_INTERFACES)) {
+                        if (wValue == 0) {  // Only support bAlternateSetting of 0 for EP0
+                            _USBWriteValue(0, 1);
+                        } else {
+                            _USBHandleControlError();
+                        }
+                    } else {
+                        _USBHandleControlError();
                     }
                     break;
+
                 case SET_INTERFACE:
-                    switch (_USBDeviceState) {
-                        case USBDeviceStateConfigured:
-                            if ((wIndex&0x00FF)<NUM_INTERFACES) {
-                                switch ((wValue&0x00FF)) {
-                                    case 0:     // currently support only bAlternateSetting of 0
-                                        _USBBD0I.count = 0x00;      // set EP0 IN byte count to 0
-                                        _USBBD0I.status = 0xC8;     // send packet as DATA1, set UOWN bit
-                                        break;
-                                    default:
-                                        _USBHandleControlError();    // set Request Error Flag
-                                }
-                            } else {
-                                _USBHandleControlError();    // set Request Error Flag
-                            }
-                            break;
-                        default:
-                            _USBHandleControlError();    // set Request Error Flag
+                    // Interface only
+                    if ((_USBDeviceState == USBDeviceStateConfigured) && (wIndex < NUMBER_OF_USB_INTERFACES)) {
+                        if (wValue == 0) {  // Only support bAlternateSetting of 0 for EP0
+                            _USBResetEP0InBuffer();
+                        } else {
+                            _USBHandleControlError();
+                        }
+                    } else {
+                        _USBHandleControlError();
                     }
                     break;
-                case SET_DESCRIPTOR:
-                case SYNCH_FRAME:
+                case SET_DESCRIPTOR:    // Useless
+                case SYNCH_FRAME:       // Unused
                 default:
-                    _USBHandleControlError();    // set Request Error Flag
+                    _USBHandleControlError();
+                    break;
             }
             break;
         case USBTokenIN:
