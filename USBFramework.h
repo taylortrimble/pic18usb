@@ -55,6 +55,10 @@
 #define	wLengthL_OFFSET		0x06
 #define	wLengthH_OFFSET	0x07
 
+// Offsets in configuration descriptor
+#define wTotalLengthL_OFFSET       (2)
+#define wTotalLengthH_OFFSET       (3)
+
 // bmRequestType bits
 #define HOST_TO_DEVICE      (0x80)
 
