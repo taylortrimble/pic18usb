@@ -196,8 +196,8 @@ far USBBufferDescriptor _USBBD7O;
 far USBBufferDescriptor _USBBD7I;
 
 #pragma udata USB_BUFFERS=0x0280
-far unsigned char _USBEP0OutBuffer[MAX_PACKET_SIZE];
-far unsigned char _USBEP0InBuffer[MAX_PACKET_SIZE];
+far unsigned char _USBEP0OutBuffer[EP0_SIZE];
+far unsigned char _USBEP0InBuffer[EP0_SIZE];
 
 void ProcessSetupToken(void);
 void ProcessInToken(void);

@@ -595,37 +595,26 @@ void _USBEngineReset(void)
     _USBEngineStatus = USBEngineStatusReset;
     _USBDeviceStatus = 0x01;
     _USBCurrentConfiguration = 0;
+    UADDR = 0;      // Reset USB bus address
 
-    UEIE = 0x00;    // Disable and clear all USB interrupts
+    // Clear all USB interrupts, enable all USB error interrupts
+    UEIE = 0x00;
     UEIR = 0x00;
-    UIE = 0x00;
     UIR = 0x00;
-    UADDR = 0x00;   // Reset USB address
+    UEIE = 0xFF;
 
     // Enable EP0
     UEP0 = 0x16;    // SETUP endpoint, not stalled
-
-    // Re-enable USB interrupts
-    UIEbits.ACTVIE = 1;
-    UIEbits.IDLEIE = 1;
-    UIEbits.TRNIE = 1;  // Enable transaction complete interrupts
-    PIE2bits.USBIE = 1; // Enable USB interrupts
-
-    // Re-enable USB error interrupts
-    UEIEbits.BTOEE = 1;
-    UEIEbits.BTSEE = 1;
-    UEIEbits.CRC16EE = 1;
-    UEIEbits.CRC5EE = 1;
-    UEIEbits.DFN8EE = 1;
-    UEIEbits.PIDEE = 1;
-    UIEbits.UERRIE = 1; // Enable USB error interrupts
 }
 
 void _USBConfigureBufferDescriptors(void)
 {
-    _USBResetEP0InBuffer();
+    _USBBD0I.status = (DTSEN);
+    // IN buffer count is left alone
+    _USBBD0I.address = _USBEP0InBuffer;
     _USBBD0O.status = (UOWN|DTSEN); // SIE owns BD, data toggle enabled
     _USBBD0O.count = EP0_SIZE;      // Allow to receive full packet
+    _USBBD0I.address = _USBEP0OutBuffer;
 }
 
 void _USBSetup()
