@@ -1,3 +1,0 @@
-Warning[2105] USBFramework.c 482 : must update so that other endpoints are to work later
-Warning[2105] USBFramework.c 573 : _uSBEngineReset may require a redo
-Warning[2058] USBFramework.c 659 : call of function without prototype

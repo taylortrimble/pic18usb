@@ -38,6 +38,7 @@
 // FOR SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.
 // 
 #include <p18f14k50.h>
+#include <delays.h>
 #include "USBFramework.h"
 
 // Configuration bits
@@ -701,27 +702,41 @@ void InitUSB(void) {
 void ServiceUSB(void) {
     USBBufferDescriptor *currentBufferDescriptor;
 
-    if (UIRbits.UERRIF) {
-        UEIR = 0x00;
-    } else if (UIRbits.SOFIF) {
-        UIRbits.SOFIF = 0;
-    } else if (UIRbits.IDLEIF) {
-        UIRbits.IDLEIF = 0;
+    // Suspend when idle
+    if (UIRbits.IDLEIF) {
         UCONbits.SUSPND = 1;
-#ifdef SHOW_ENUM_STATUS
-        LATC &= 0xE0;
-        LATCbits.LATC4 = 1;
-#endif
-    } else if (UIRbits.ACTVIF) {
-        UIRbits.ACTVIF = 0;
+        UIRbits.IDLEIF = 0;
+    }
+
+    // Unsuspend when bus active
+    if (UIRbits.ACTVIF) {
         UCONbits.SUSPND = 0;
-#ifdef SHOW_ENUM_STATUS
-        LATC &= 0xE0;
-        LATC |= 0x01<<_USBDeviceState;
-#endif
-    } else if (UIRbits.STALLIF) {
+        while (UIRbits.ACTVIF) {
+            UIRbits.ACTVIF = 0;
+        }
+    }
+
+    // Start of Frame - ignored
+    if (UIRbits.SOFIF) {
+        // Ignored
+        UIRbits.SOFIF = 0;
+    }
+
+    // Bus stall - ignored
+    if (UIRbits.STALLIF) {
+        // Ignored
         UIRbits.STALLIF = 0;
-    } else if (UIRbits.URSTIF) {
+    }
+
+    // Error handling - ignored
+    if (UIRbits.UERRIF) {
+        // Ignored
+        UEIR = 0x00;            // Clear all USB err flags
+        UIRbits.UERRIF = 0;
+    }
+
+    // Handle USB reset
+    if (UIRbits.URSTIF) {
         _USBCurrentConfiguration = 0x00;
         UIRbits.TRNIF = 0;      // clear TRNIF four times to clear out the USTAT FIFO
         UIRbits.TRNIF = 0;
@@ -750,7 +765,10 @@ void ServiceUSB(void) {
         LATC &= 0xE0;
         LATCbits.LATC1 = 1;     // set bit 1 of LATC to indicate Powered state
 #endif
-    } else if (UIRbits.TRNIF) {
+    }
+
+    // Handle USB transaction
+    if (UIRbits.TRNIF) {
         currentBufferDescriptor = (USBBufferDescriptor *)((unsigned char *)(&_USBBD0O)+(USTAT&0x7C));  // mask out bits 0, 1, and 7 of USTAT for offset into the buffer descriptor table
         gCurrentBufferDescriptor.status = currentBufferDescriptor->status;
         gCurrentBufferDescriptor.count = currentBufferDescriptor->count;
