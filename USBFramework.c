@@ -176,7 +176,7 @@ void _USBWriteValue(unsigned value, unsigned char bytes);
 void _USBSendDescriptor(void);
 void _USBWriteDescriptor(rom const unsigned char *descriptor, unsigned char bytes);
 void _USBWriteSingleDescriptor(rom const unsigned char *descriptor);
-void _USBProcessEP0(void);
+void _USBProcessEP0(USBTransaction *transaction);
 void _USBEngineReset(void);
 void _USBConfigureBufferDescriptors(void);
 void _USBSetup(void);
@@ -295,12 +295,8 @@ void _USBWriteSingleDescriptor(rom const unsigned char *descriptor)
     _USBWriteDescriptor(descriptor, descriptor[bLength_OFFSET]);
 }
 
-void _USBProcessEP0(void)
+void _USBProcessEP0(USBTransaction *transaction)
 {
-    unsigned char *UEP;
-    unsigned char n;
-    USBBufferDescriptor *currentBufferDescriptor;
-
     unsigned char *transactionData;
     USBToken transactionToken;
     unsigned char bRequest;
@@ -308,8 +304,8 @@ void _USBProcessEP0(void)
     unsigned wValue;
     unsigned wIndex;
 
-    transactionData = gCurrentBufferDescriptor.address;
-    transactionToken = (gCurrentBufferDescriptor.status&0x3C)>>2;
+    transactionData = transaction->bd->address;
+    transactionToken = (transaction->bd->status&0x3C)>>2;
 
     switch (transactionToken) {  // extract PID bits
         case USBTokenSETUP:
@@ -731,25 +727,20 @@ void ServiceUSB(void) {
 
     // Handle USB transaction
     if (UIRbits.TRNIF) {
-        currentBufferDescriptor = (USBBufferDescriptor *)((unsigned char *)(&_USBBD0O)+(USTAT&0x7C));  // mask out bits 0, 1, and 7 of USTAT for offset into the buffer descriptor table
-        gCurrentBufferDescriptor.status = currentBufferDescriptor->status;
-        gCurrentBufferDescriptor.count = currentBufferDescriptor->count;
-        gCurrentBufferDescriptor.address = currentBufferDescriptor->address;
-        gCachedUSTAT = USTAT;      // save the USB status register
-        UIRbits.TRNIF = 0;      // clear TRNIF interrupt flag
-#ifdef SHOW_ENUM_STATUS
-        switch (gCachedUSTAT&0x18) {   // toggle bit 5, 6, or 7 of LATC to reflect EP0, EP1, or EP2 activity
-            case EP0:
-                LATC ^= 0x20;
+        USBTransaction transaction = _USBGetCurrentTransaction();
+
+        // Route transaction to endpoint
+        switch (transaction.endpoint) {
+            case 0:
+                _USBProcessEP0(&transaction);
                 break;
-            case EP1:
-                LATC ^= 0x40;
+
+            default:
                 break;
-            case EP2:
-                LATC ^= 0x80;
         }
-#endif
-        _USBProcessEP0();
+
+        // Clear flags
+        UIRbits.TRNIF = 0;  // Advances FIFO
     }
 }
 
