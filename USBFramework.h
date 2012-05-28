@@ -170,6 +170,13 @@ typedef struct _USBBufferDescriptor {
 	unsigned char *address;
 } USBBufferDescriptor;
 
+typedef struct _USBTransaction {
+    unsigned char USTAT;
+    unsigned char endpoint;
+    USBToken token;
+    USBBufferDescriptor *bd;
+} USBTransaction;
+
 #pragma udata USB_BUFFER_DESCRIPTOR_TABLE=0x0200
 far USBBufferDescriptor _USBBD0O;
 far USBBufferDescriptor _USBBD0I;

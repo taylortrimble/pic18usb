@@ -168,6 +168,7 @@ rom const rom const unsigned char *_USBStringDescriptors[] = {
 #pragma code
 void HighPriorityISR(void);
 void LowPriorityISR(void);
+USBTransaction _USBGetCurrentTransaction(void);
 void _USBHandleControlError(void);
 void _USBResetEP0InBuffer(void);
 void _USBWriteValue(unsigned value, unsigned char bytes);
@@ -194,6 +195,20 @@ void HighPriorityISR(void)
 void LowPriorityISR(void)
 {
     // Low interrupt service routine
+}
+
+USBTransaction _USBGetCurrentTransaction(void)
+{
+    USBTransaction transaction;
+    USBBufferDescriptor *bd;
+
+    bd = (USBBufferDescriptor *)(0x200+USTAT);
+    transaction.USTAT = USTAT;
+    transaction.endpoint = (USTAT&0x38)>>3;     // Transaction endpoint is recorded in USTAT<5:3>
+    transaction.token = bd->status >> 2;        // Transaction PID is recorded in BDnSTAT<5:2>
+    transaction.bd = bd;                        // Point to the USB SIE buffer descriptor
+
+    return transaction;
 }
 
 void _USBHandleControlError(void)
