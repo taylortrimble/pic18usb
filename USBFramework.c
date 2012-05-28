@@ -176,6 +176,8 @@ void _USBSendDescriptor(void);
 void _USBWriteDescriptor(rom const unsigned char *descriptor, unsigned char bytes);
 void _USBWriteSingleDescriptor(rom const unsigned char *descriptor);
 void _USBProcessEP0(void);
+void _USBEngineReset(void);
+void _USBConfigureBufferDescriptors(void);
 void InitUSB(void);
 void ServiceUSB(void);
 
@@ -563,6 +565,64 @@ void _USBProcessEP0(void)
             _USBHandleControlError();
             break;
     }
+}
+
+void _USBEngineReset(void)
+{
+#warning _uSBReset may require a redo
+    unsigned char *index;
+
+    // Clear USTAT FIFO
+    UIRbits.TRNIF = 0;
+    UIRbits.TRNIF = 0;
+    UIRbits.TRNIF = 0;
+    UIRbits.TRNIF = 0;
+
+    // Disable all endpoints
+    for (index = (unsigned char *)&UEP0;
+         index <= (unsigned char *)&UEP7;
+         index++) {
+        *index = 0x00;
+    }
+
+    // Reset endpoint buffer descriptors
+    _USBConfigureBufferDescriptors();
+
+    // Reset general USB
+    _USBDeviceState = USBDeviceStateReset;
+    _USBEngineStatus = USBEngineStatusReset;
+    _USBCurrentConfiguration = 0;
+
+    UEIE = 0x00;    // Disable and clear all USB interrupts
+    UEIR = 0x00;
+    UIE = 0x00;
+    UIR = 0x00;
+    UADDR = 0x00;   // Reset USB address
+
+    // Enable EP0
+    UEP0 = 0x16;    // SETUP endpoint, not stalled
+
+    // Re-enable USB interrupts
+    UIEbits.ACTVIE = 1;
+    UIEbits.IDLEIE = 1;
+    UIEbits.TRNIE = 1;  // Enable transaction complete interrupts
+    PIE2bits.USBIE = 1; // Enable USB interrupts
+
+    // Re-enable USB error interrupts
+    UEIEbits.BTOEE = 1;
+    UEIEbits.BTSEE = 1;
+    UEIEbits.CRC16EE = 1;
+    UEIEbits.CRC5EE = 1;
+    UEIEbits.DFN8EE = 1;
+    UEIEbits.PIDEE = 1;
+    UIEbits.UERRIE = 1; // Enable USB error interrupts
+}
+
+void _USBConfigureBufferDescriptors(void)
+{
+    _USBResetEP0InBuffer();
+    _USBBD0O.status = (UOWN|DTSEN); // SIE owns BD, data toggle enabled
+    _USBBD0O.count = EP0_SIZE;      // Allow to receive full packet
 }
 
 void InitUSB(void) {
