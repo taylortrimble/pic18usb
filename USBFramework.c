@@ -178,6 +178,7 @@ void _USBWriteSingleDescriptor(rom const unsigned char *descriptor);
 void _USBProcessEP0(void);
 void _USBEngineReset(void);
 void _USBConfigureBufferDescriptors(void);
+void _USBSetup(void);
 void InitUSB(void);
 void ServiceUSB(void);
 
@@ -569,7 +570,7 @@ void _USBProcessEP0(void)
 
 void _USBEngineReset(void)
 {
-#warning _uSBReset may require a redo
+#warning _uSBEngineReset may require a redo
     unsigned char *index;
 
     // Clear USTAT FIFO
@@ -591,6 +592,7 @@ void _USBEngineReset(void)
     // Reset general USB
     _USBDeviceState = USBDeviceStateReset;
     _USBEngineStatus = USBEngineStatusReset;
+    _USBDeviceStatus = 0x01;
     _USBCurrentConfiguration = 0;
 
     UEIE = 0x00;    // Disable and clear all USB interrupts
@@ -623,6 +625,61 @@ void _USBConfigureBufferDescriptors(void)
     _USBResetEP0InBuffer();
     _USBBD0O.status = (UOWN|DTSEN); // SIE owns BD, data toggle enabled
     _USBBD0O.count = EP0_SIZE;      // Allow to receive full packet
+}
+
+void _USBSetup()
+{
+    // Setup
+    LATC = 0x00;
+    TRISC = 0xF0;
+
+    // status = 0x01; for all disabled?????
+    // Set device variables
+    _USBDeviceState = USBDeviceStateReset;         // Reset USB state
+    _USBEngineStatus = USBEngineStatusReset;
+    _USBDeviceStatus = 0x01;
+    _USBCurrentConfiguration = 0;
+
+    // General USB setup
+    UEIE = 0x00;    // Disable and clear all USB interrupts
+    UEIR = 0x00;
+    UIE = 0x00;
+    UIR = 0x00;
+    UCON = 0x00;    // Resume signaling off, suspend mode off, USB off
+    UCFG = 0x16;    // Eye off, pull ups enabled, full speed, ping pong all
+    UADDR = 0x00;   // Reset USB address
+
+    // Configure endpoint buffer descriptors
+    _USBConfigureBufferDescriptors();
+
+    // Configure endpoints
+    UEP0 = 0x14;    // SETUP endpoint, not stalled
+
+    // Enable USB
+    Delay1KTCYx(24);        // Wait 2ms for clock to stabilize
+    UCONbits.USBEN = 1;     // then enable USB
+    while (UCONbits.SE0);   // Wait for first SE0 to end (marks bus power)
+
+    // Configure USB interrupts
+    UIEbits.ACTVIE = 1;
+    UIEbits.IDLEIE = 1;
+    UIEbits.TRNIE = 1;  // Enable transaction complete interrupts
+    PIE2bits.USBIE = 1; // Enable USB interrupts
+
+    // Configure USB error interrupts
+    UEIEbits.BTOEE = 1;
+    UEIEbits.BTSEE = 1;
+    UEIEbits.CRC16EE = 1;
+    UEIEbits.CRC5EE = 1;
+    UEIEbits.DFN8EE = 1;
+    UEIEbits.PIDEE = 1;
+    UIEbits.UERRIE = 1; // Enable USB error interrupts
+
+    // Enable global interrupts
+    INTCONbits.PEIE = 1;
+    INTCONbits.GIE = 1;
+
+    _USBDeviceState |= USBDeviceStateInitialized;  // Set USB state to initialized
 }
 
 void InitUSB(void) {
@@ -714,6 +771,11 @@ void ServiceUSB(void) {
 #endif
         _USBProcessEP0();
     }
+}
+
+void Setup()
+{
+    _USBSetup();
 }
 
 void main(void) {
