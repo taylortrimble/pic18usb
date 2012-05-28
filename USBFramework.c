@@ -726,34 +726,8 @@ void ServiceUSB(void) {
 
     // Handle USB reset
     if (UIRbits.URSTIF) {
-        _USBCurrentConfiguration = 0x00;
-        UIRbits.TRNIF = 0;      // clear TRNIF four times to clear out the USTAT FIFO
-        UIRbits.TRNIF = 0;
-        UIRbits.TRNIF = 0;
-        UIRbits.TRNIF = 0;
-        UEP0 = 0x00;                // clear all EP control registers to disable all endpoints
-        UEP1 = 0x00;
-        UEP2 = 0x00;
-        UEP3 = 0x00;
-        UEP4 = 0x00;
-        UEP5 = 0x00;
-        UEP6 = 0x00;
-        UEP7 = 0x00;
-        _USBBD0O.count = MAX_PACKET_SIZE;
-        _USBBD0O.address = _USBEP0OutBuffer;  // EP0 OUT gets a buffer
-        _USBBD0O.status = 0x88;             // set UOWN bit (USB can write)
-        _USBBD0I.address = _USBEP0InBuffer;   // EP0 IN gets a buffer
-        _USBBD0I.status = 0x08;             // clear UOWN bit (MCU can write)
-        UADDR = 0x00;               // set USB Address to 0
-        UIR = 0x00;             // clear all the USB interrupt flags
-        UEP0 = ENDPT_CONTROL;   // EP0 is a control pipe and requires an ACK
-        UEIE = 0xFF;            // enable all error interrupts
-        _USBDeviceState = USBDeviceStateInitialized;
-        _USBDeviceStatus = 0x01;   // self powered, remote wakeup disabled
-#ifdef SHOW_ENUM_STATUS
-        LATC &= 0xE0;
-        LATCbits.LATC1 = 1;     // set bit 1 of LATC to indicate Powered state
-#endif
+        _USBEngineReset();
+        UIRbits.URSTIF = 0;
     }
 
     // Handle USB transaction
