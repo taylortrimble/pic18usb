@@ -723,6 +723,7 @@ void ServiceUSB(void) {
     // Handle USB reset
     if (UIRbits.URSTIF) {
         _USBEngineReset();
+        UIRbits.URSTIF = 0;
     }
 
     // Handle USB transaction
