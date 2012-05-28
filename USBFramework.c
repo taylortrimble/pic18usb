@@ -41,6 +41,8 @@
 #include <delays.h>
 #include "USBFramework.h"
 
+#define TRIMBLE_RESET
+
 // Configuration bits
 #pragma config CPUDIV = NOCLKDIV
 #pragma config USBDIV = OFF
@@ -192,7 +194,63 @@ void _low_priority_isr(void) {_asm goto LowPriorityISR _endasm}
 #pragma interrupt HighPriorityISR
 void HighPriorityISR(void)
 {
-    // High interrupt service routine
+    // Suspend when idle
+    if (UIRbits.IDLEIF) {
+        UCONbits.SUSPND = 1;
+        UIRbits.IDLEIF = 0;
+    }
+
+    // Unsuspend when bus active
+    if (UIRbits.ACTVIF) {
+        UCONbits.SUSPND = 0;
+        while (UIRbits.ACTVIF) {
+            UIRbits.ACTVIF = 0;
+        }
+    }
+
+    // Start of Frame - ignored
+    if (UIRbits.SOFIF) {
+        // Ignored
+        UIRbits.SOFIF = 0;
+    }
+
+    // Bus stall - ignored
+    if (UIRbits.STALLIF) {
+        // Ignored
+        UIRbits.STALLIF = 0;
+    }
+
+    // Error handling - ignored
+    if (UIRbits.UERRIF) {
+        // Ignored
+        UEIR = 0x00;            // Clear all USB err flags
+        UIRbits.UERRIF = 0;
+    }
+
+    // Handle USB reset
+    if (UIRbits.URSTIF) {
+        _USBEngineReset();
+        UIRbits.URSTIF = 0;
+    }
+
+    // Handle USB transaction
+    if (UIRbits.TRNIF) {
+        USBTransaction transaction = _USBGetCurrentTransaction();
+
+        // Route transaction to endpoint
+        switch (transaction.endpoint) {
+            case 0:
+                _USBProcessEP0(&transaction);
+                break;
+            default:
+                break;
+        }
+
+        // Clear flags
+        UIRbits.TRNIF = 0;
+    }
+
+    PIR2bits.USBIF = 0;
 }
 
 #pragma interruptlow LowPriorityISR
@@ -568,6 +626,38 @@ void _USBProcessEP0(USBTransaction *transaction)
 void _USBEngineReset(void)
 {
 #warning _uSBEngineReset may require a redo
+#ifdef MINCH_RESET
+    _USBCurrentConfiguration = 0x00;
+        UIRbits.TRNIF = 0;      // clear TRNIF four times to clear out the USTAT FIFO
+        UIRbits.TRNIF = 0;
+        UIRbits.TRNIF = 0;
+        UIRbits.TRNIF = 0;
+        UEP0 = 0x00;                // clear all EP control registers to disable all endpoints
+        UEP1 = 0x00;
+        UEP2 = 0x00;
+        UEP3 = 0x00;
+        UEP4 = 0x00;
+        UEP5 = 0x00;
+        UEP6 = 0x00;
+        UEP7 = 0x00;
+        _USBBD0O.count = EP0_SIZE;
+        _USBBD0O.address = _USBEP0OutBuffer;  // EP0 OUT gets a buffer
+        _USBBD0O.status = 0x88;             // set UOWN bit (USB can write)
+        _USBBD0I.address = _USBEP0InBuffer;   // EP0 IN gets a buffer
+        _USBBD0I.status = 0x08;             // clear UOWN bit (MCU can write)
+        UADDR = 0x00;               // set USB Address to 0
+        UIR = 0x00;             // clear all the USB interrupt flags
+        UEP0 = ENDPT_CONTROL;   // EP0 is a control pipe and requires an ACK
+        UEIE = 0xFF;            // enable all error interrupts
+        _USBDeviceState = USBDeviceStateInitialized;
+        _USBDeviceStatus = 0x01;   // self powered, remote wakeup disabled
+#ifdef SHOW_ENUM_STATUS
+        LATC &= 0xE0;
+        LATCbits.LATC1 = 1;     // set bit 1 of LATC to indicate Powered state
+#endif
+#endif
+
+#ifdef TRIMBLE_RESET
     unsigned char *index;
 
     // Clear USTAT FIFO
@@ -601,6 +691,7 @@ void _USBEngineReset(void)
 
     // Enable EP0
     UEP0 = 0x16;    // SETUP endpoint, not stalled
+#endif
 }
 
 void _USBConfigureBufferDescriptors(void)
@@ -682,6 +773,13 @@ void InitUSB(void) {
     LATC = 0x01;                // set bit zero to indicate Powered status
 #endif
     while (UCONbits.SE0);       // wait for the first SE0 to end
+
+    PIR2bits.USBIF = 0;
+    PIE2bits.USBIE = 1;
+    UEIE = 0x9F;
+    UIE = 0x7F;
+    INTCONbits.PEIE = 1;
+    INTCONbits.GIE = 1;
 }
 
 void ServiceUSB(void) {
@@ -752,6 +850,6 @@ void Setup()
 void main(void) {
     InitUSB();          // initialize the USB registers and serial interface engine
     while (1) {
-        ServiceUSB();
+        //ServiceUSB();
     }
 }
