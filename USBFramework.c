@@ -41,8 +41,6 @@
 #include <delays.h>
 #include "USBFramework.h"
 
-#define TRIMBLE_RESET
-
 // Configuration bits
 #pragma config CPUDIV = NOCLKDIV
 #pragma config USBDIV = OFF
@@ -76,19 +74,13 @@
 #define SHOW_ENUM_STATUS
 #define UPDATE_ENUM_STATUS(status) LATC=(1<<status);
 
-#define SET_RA0         0x01        // vendor-specific request to set RA0 to high
-#define CLR_RA0         0x02        // vendor-specific request to set RA0 to low
-
 #pragma udata
-USBBufferDescriptor gCurrentBufferDescriptor;
 unsigned char _USBCurrentConfiguration;
 USBDeviceStatus _USBDeviceStatus;
 unsigned char _USBEngineStatus;
 unsigned char _USBPendingDeviceAddress;
 rom unsigned char *_USBDescriptorToSend;
 unsigned char _USBDescriptorBytesLeft;
-unsigned char gUSBPacketLength;
-unsigned char gCachedUSTAT;
 USBDeviceState _USBDeviceState;
 
 #pragma romdata
@@ -182,8 +174,6 @@ void _USBProcessEP0(USBTransaction *transaction);
 void _USBEngineReset(void);
 void _USBConfigureBufferDescriptors(void);
 void _USBSetup(void);
-void InitUSB(void);
-void ServiceUSB(void);
 
 // Interrupt service routines
 #pragma code __HIGH_PRIORITY_ISR__=0x0008
@@ -263,10 +253,9 @@ USBTransaction _USBGetCurrentTransaction(void)
     USBBufferDescriptor *bd;
 
     bd = (USBBufferDescriptor *)(0x200+USTAT);
-    transaction.USTAT = USTAT;
-    transaction.endpoint = (USTAT&0x38)>>3;     // Transaction endpoint is recorded in USTAT<5:3>
-    transaction.token = bd->status >> 2;        // Transaction PID is recorded in BDnSTAT<5:2>
-    transaction.bd = bd;                        // Point to the USB SIE buffer descriptor
+    transaction.endpoint = (USTAT&0x38)>>3;         // Transaction endpoint is recorded in USTAT<5:3>
+    transaction.token = (bd->status & 0x3C) >> 2;   // Transaction PID is recorded in BDnSTAT<5:2>
+    transaction.bd = bd;                            // Point to the USB SIE buffer descriptor
 
     return transaction;
 }
@@ -354,16 +343,14 @@ void _USBWriteSingleDescriptor(rom const unsigned char *descriptor)
 void _USBProcessEP0(USBTransaction *transaction)
 {
     unsigned char *transactionData;
-    USBToken transactionToken;
     unsigned char bRequest;
     unsigned char bmRequestType;
     unsigned wValue;
     unsigned wIndex;
 
     transactionData = transaction->bd->address;
-    transactionToken = (transaction->bd->status&0x3C)>>2;
 
-    switch (transactionToken) {  // extract PID bits
+    switch (transaction->token) {  // extract PID bits
         case USBTokenSETUP:
             // SETUP token processing
             bRequest = transactionData[bRequest_OFFSET];

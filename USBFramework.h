@@ -171,7 +171,6 @@ typedef struct _USBBufferDescriptor {
 } USBBufferDescriptor;
 
 typedef struct _USBTransaction {
-    unsigned char USTAT;
     unsigned char endpoint;
     USBToken token;
     USBBufferDescriptor *bd;
