@@ -88,45 +88,45 @@ unsigned char _USBDescriptorBytesLeft;
 
 #pragma romdata
 rom const unsigned char _USBDeviceDescriptor[] = {
-    0x12,               // bLength
-    USB_DEVICE_DESCRIPTOR_TYPE,             // bDescriptorType
-    0x10,               // bcdUSB (low byte)
-    0x01,               // bcdUSB (high byte)
-    0x00,               // bDeviceClass
-    0x00,               // bDeviceSubClass
-    0x00,               // bDeviceProtocol
-    EP0_SIZE,    // bMaxPacketSize
-    0xD8,               // idVendor (low byte)
-    0x04,               // idVendor (high byte)
-    0x01,               // idProduct (low byte)
-    0x00,               // idProduct (high byte)
-    0x00,               // bcdDevice (low byte)
-    0x00,               // bcdDevice (high byte)
-    0x01,               // iManufacturer
-    0x02,               // iProduct
-    0x00,               // iSerialNumber (none)
-    NUMBER_OF_USB_CONFIGURATIONS  // bNumConfigurations
+    0x12,                           // bLength
+    USB_DEVICE_DESCRIPTOR_TYPE,     // bDescriptorType
+    0x10,                           // bcdUSB (low byte)
+    0x01,                           // bcdUSB (high byte)
+    0x00,                           // bDeviceClass
+    0x00,                           // bDeviceSubClass
+    0x00,                           // bDeviceProtocol
+    EP0_SIZE,                       // bMaxPacketSize
+    0xD8,                           // idVendor (low byte)
+    0x04,                           // idVendor (high byte)
+    0x01,                           // idProduct (low byte)
+    0x00,                           // idProduct (high byte)
+    0x00,                           // bcdDevice (low byte)
+    0x00,                           // bcdDevice (high byte)
+    0x01,                           // iManufacturer
+    0x02,                           // iProduct
+    0x00,                           // iSerialNumber (none)
+    NUMBER_OF_USB_CONFIGURATIONS    // bNumConfigurations
 };
 
 rom const unsigned char _USBConfigurationDescriptor[] = {
-    0x09,               // bLength
-    USB_CONFIGURATION_DESCRIPTOR_TYPE,      // bDescriptorType
-    0x12,               // wTotalLength (low byte)
-    0x00,               // wTotalLength (high byte)
-    NUMBER_OF_USB_INTERFACES,     // bNumInterfaces
-    0x01,               // bConfigurationValue
-    0x00,               // iConfiguration (none)
-    0xA0,               // bmAttributes
-    0x32,               // bMaxPower (100 mA)
-    0x09,               // bLength (Interface1 descriptor starts here)
-    USB_INTERFACE_DESCRIPTOR_TYPE,          // bDescriptorType
-    0,                  // bInterfaceNumber
-    0x00,               // bAlternateSetting
-    0x00,               // bNumEndpoints (excluding EP0)
-    0xFF,               // bInterfaceClass (vendor specific class code)
-    0x00,               // bInterfaceSubClass
-    0xFF,               // bInterfaceProtocol (vendor specific protocol used)
-    0x00                // iInterface (none)
+    0x09,                               // bLength
+    USB_CONFIGURATION_DESCRIPTOR_TYPE,  // bDescriptorType
+    0x12,                               // wTotalLength (low byte)
+    0x00,                               // wTotalLength (high byte)
+    NUMBER_OF_USB_INTERFACES,           // bNumInterfaces
+    0x01,                               // bConfigurationValue
+    0x00,                               // iConfiguration (none)
+    0xA0,                               // bmAttributes
+    0x32,                               // bMaxPower (100 mA)
+    0x09,                               // bLength (Interface1 descriptor starts here)
+    USB_INTERFACE_DESCRIPTOR_TYPE,      // bDescriptorType
+    0,                                  // bInterfaceNumber
+    0x00,                               // bAlternateSetting
+    0x00,                               // bNumEndpoints (excluding EP0)
+    0xFF,                               // bInterfaceClass (vendor specific class code)
+    0x00,                               // bInterfaceSubClass
+    0xFF,                               // bInterfaceProtocol (vendor specific protocol used)
+    0x00                                // iInterface (none)
 };
 
 rom const rom const unsigned char *_USBConfigurationDescriptors[] = {
@@ -134,23 +134,23 @@ rom const rom const unsigned char *_USBConfigurationDescriptors[] = {
 };
 
 rom const unsigned char _USBLangIDStringDescriptor[] = {    // LangID (special string descriptor at index 0)
-    0x04,               // bLength
-    USB_STRING_DESCRIPTOR_TYPE,             // bDescriptorType
-    0x09,               // wLANGID[0] (low byte)
-    0x04                // wLANGID[0] (high byte)
+    0x04,                       // bLength
+    USB_STRING_DESCRIPTOR_TYPE, // bDescriptorType
+    0x09,                       // wLANGID[0] (low byte)
+    0x04                        // wLANGID[0] (high byte)
 };
 
 rom const unsigned char _USBManufacturerStringDescriptor[] = {
-    0x36,               // bLength
-    USB_STRING_DESCRIPTOR_TYPE,             // bDescriptorType
+    0x36,                       // bLength
+    USB_STRING_DESCRIPTOR_TYPE, // bDescriptorType
     'M', 0x00, 'i', 0x00, 'c', 0x00, 'r', 0x00, 'o', 0x00, 'c', 0x00, 'h', 0x00, 'i', 0x00, 'p', 0x00, ' ', 0x00,
     'T', 0x00, 'e', 0x00, 'c', 0x00, 'h', 0x00, 'n', 0x00, 'o', 0x00, 'l', 0x00, 'o', 0x00, 'g', 0x00, 'y', 0x00, ',', 0x00, ' ', 0x00,
     'I', 0x00, 'n', 0x00, 'c', 0x00, '.', 0x00
 };
 
 rom const unsigned char _USBDeviceStringDescriptor[] = {
-    0x44,               // bLength
-    USB_STRING_DESCRIPTOR_TYPE,             // bDescriptorType
+    0x44,                       // bLength
+    USB_STRING_DESCRIPTOR_TYPE, // bDescriptorType
     'E', 0x00, 'N', 0x00, 'G', 0x00, 'R', 0x00, ' ', 0x00, '2', 0x00, '2', 0x00, '1', 0x00, '0', 0x00, ' ', 0x00,
     'P', 0x00, 'I', 0x00, 'C', 0x00, '1', 0x00, '8', 0x00, 'F', 0x00, '2', 0x00, '4', 0x00, '5', 0x00, '5', 0x00, ' ', 0x00,
     'U', 0x00, 'S', 0x00, 'B', 0x00, ' ', 0x00,
@@ -291,7 +291,7 @@ void _USBWriteValue(unsigned value, unsigned char bytes)
 
     // Return data to SIE through buffer descriptor
     _USBBD0I.count = bytes;
-    _USBBD0I.status = (UOWN|DTS|DTSEN);    // Set UOWN, send as DATA1
+    _USBBD0I.status = (UOWN|DTS|DTSEN);     // Set UOWN, send as DATA1
 }
 
 void _USBSendDescriptor(void)
@@ -306,8 +306,8 @@ void _USBSendDescriptor(void)
 
         // Return data to SIE through buffer descriptor
         _USBBD0I.count = _USBDescriptorBytesLeft;
-        _USBBD0I.status = _USBBD0I.status^DTS;                // Toggle the DATAx bit
-        _USBBD0I.status = (_USBBD0I.status&DTS)|(UOWN|DTSEN); // Preserve DATAx, clear rest, set UOWN and DTSEN
+        _USBBD0I.status = _USBBD0I.status^DTS;                  // Toggle the DATAx bit
+        _USBBD0I.status = (_USBBD0I.status&DTS)|(UOWN|DTSEN);   // Preserve DATAx, clear rest, set UOWN and DTSEN
 
         // Not sending a descriptor any more
         _USBEngineStatus &= ~USBEngineStatusSendingDescriptor;
@@ -320,8 +320,8 @@ void _USBSendDescriptor(void)
 
         // Return data to SIE through buffer descriptor
         _USBBD0I.count = EP0_SIZE;
-        _USBBD0I.status = _USBBD0I.status^DTS;                // Toggle the DATAx bit
-        _USBBD0I.status = (_USBBD0I.status&DTS)|(UOWN|DTSEN); // Preserve DATAx, clear rest, set UOWN and DTSEN
+        _USBBD0I.status = _USBBD0I.status^DTS;                  // Toggle the DATAx bit
+        _USBBD0I.status = (_USBBD0I.status&DTS)|(UOWN|DTSEN);   // Preserve DATAx, clear rest, set UOWN and DTSEN
 
         // Inform IN token processing to keep sending descriptor
         _USBEngineStatus |= USBEngineStatusSendingDescriptor;
@@ -354,7 +354,7 @@ void _USBProcessEP0(USBTransaction *transaction)
 
     transactionData = transaction->bd->address;
 
-    switch (transaction->token) {  // extract PID bits
+    switch (transaction->token) {               // extract PID bits
         case USBTokenSETUP:
             // SETUP token processing
             bRequest = transactionData[bRequest_OFFSET];
@@ -363,13 +363,12 @@ void _USBProcessEP0(USBTransaction *transaction)
             wIndex = transactionData[wIndexL_OFFSET] + (transactionData[wIndexH_OFFSET])*0x100;
             
             // Reset OUT endpoint, dequeue any IN packets, and re-enable packet transfers
-            _USBBD0O.status = ((!(bmRequestType&HOST_TO_DEVICE)&&wValue) ? (UOWN|DTS|DTSEN) : (UOWN|DTSEN)); // Choose correct DATA0/DATA1
+            _USBBD0O.status = ((!(bmRequestType&HOST_TO_DEVICE)&&wValue) ? (UOWN|DTS|DTSEN) : (UOWN|DTSEN));    // Choose correct DATA0/DATA1
             _USBBD0O.count = EP0_SIZE;
-            _USBBD0I.status = DTSEN;   // steal UOWN to dequeue IN packets
+            _USBBD0I.status = DTSEN;            // steal UOWN to dequeue IN packets
             UCONbits.PKTDIS = 0;
             _USBEngineStatus = USBEngineStatusReset;
             
-            // Move more up after testing/commit. The above is a combination of my code and Brad Minch's.
             switch (bRequest) {
                 case GET_STATUS:
                     switch (bmRequestType) {
@@ -480,7 +479,7 @@ void _USBProcessEP0(USBTransaction *transaction)
                             }
                             break;
 
-                        case USB_INTERFACE_REQUEST: // Should never happen
+                        case USB_INTERFACE_REQUEST:     // Should never happen
                         default:
                             _USBHandleControlError();
                             break;
@@ -499,7 +498,7 @@ void _USBProcessEP0(USBTransaction *transaction)
 
                 case GET_DESCRIPTOR:
                     // Device only (bmRequestType)
-                    switch ((wValue>>8)&0x00FF) { // High byte contains descriptor type
+                    switch ((wValue>>8)&0x00FF) {   // High byte contains descriptor type
                         case USB_DEVICE_DESCRIPTOR_TYPE:
                             _USBWriteSingleDescriptor(_USBDeviceDescriptor);
                             break;
@@ -637,7 +636,7 @@ void _USBEngineReset(void)
     _USBEngineStatus = USBEngineStatusReset;
     _USBDeviceStatus = 0x01;
     _USBCurrentConfiguration = 0;
-    UADDR = 0;      // Reset USB bus address
+    UADDR = 0;
 
     // Clear all USB interrupts, enable all USB error interrupts
     UEIE = 0x00;
@@ -665,7 +664,6 @@ void _USBSetup()
     LATC = 0x00;
     TRISC = 0xF0;
 
-    // status = 0x01; for all disabled?????
     // Set device variables
     _USBDeviceState = USBDeviceStateReset;         // Reset USB state
     _USBEngineStatus = USBEngineStatusReset;
@@ -678,15 +676,15 @@ void _USBSetup()
     UEIR = 0x00;
     UIE = 0x00;
     UIR = 0x00;
-    UCON = 0x00;    // Resume signaling off, suspend mode off, USB off
-    UCFG = 0x14;    // Eye off, pull ups enabled, full speed, ping pong all
-    UADDR = 0x00;   // Reset USB address
+    UCON = 0x00;            // Resume signaling off, suspend mode off, USB off
+    UCFG = 0x14;            // Eye off, pull ups enabled, full speed, ping pong all
+    UADDR = 0x00;           // Reset USB address
 
     // Configure endpoint buffer descriptors
     _USBConfigureBufferDescriptors();
 
     // Configure endpoints
-    UEP0 = 0x16;    // SETUP endpoint, not stalled
+    UEP0 = 0x16;            // SETUP endpoint, not stalled
 
     // Enable USB
     Delay1KTCYx(24);        // Wait 2ms for clock to stabilize
@@ -699,8 +697,8 @@ void _USBSetup()
     UIEbits.SOFIE = 1;
     UIEbits.STALLIE = 1;
     UIEbits.URSTIE = 1;
-    UIEbits.TRNIE = 1;  // Enable transaction complete interrupts
-    PIE2bits.USBIE = 1; // Enable USB interrupts
+    UIEbits.TRNIE = 1;      // Enable transaction complete interrupts
+    PIE2bits.USBIE = 1;     // Enable USB interrupts
 
     // Configure USB error interrupts
     UEIEbits.BTOEE = 1;
@@ -709,13 +707,13 @@ void _USBSetup()
     UEIEbits.CRC5EE = 1;
     UEIEbits.DFN8EE = 1;
     UEIEbits.PIDEE = 1;
-    UIEbits.UERRIE = 1; // Enable USB error interrupts
+    UIEbits.UERRIE = 1;     // Enable USB error interrupts
 
     // Enable global interrupts
     INTCONbits.PEIE = 1;
     INTCONbits.GIE = 1;
 
-    _USBDeviceState = USBDeviceStateInitialized;  // Set USB state to initialized
+    _USBDeviceState = USBDeviceStateInitialized;    // Set USB state to initialized
     UPDATE_ENUM_STATUS(_USBDeviceState);
 }
 

@@ -1,2 +1,2 @@
-Warning[2105] USBFramework.c 526 : must update so that other endpoints are to work later
-Warning[2058] USBFramework.c 728 : call of function without prototype
+Warning[2105] USBFramework.c 525 : must update so that other endpoints are to work later
+Warning[2058] USBFramework.c 726 : call of function without prototype
