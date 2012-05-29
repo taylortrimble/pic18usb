@@ -73,26 +73,29 @@
 
 #define SHOW_ENUM_STATUS
 #define UPDATE_ENUM_STATUS(status) LATC=(1<<status);
+#define flag LATC |= 0x01
+#define whoa flag; while(1)
 
 #pragma udata
-unsigned char _USBCurrentConfiguration;
+USBDeviceState _USBDeviceState;
+USBEngineStatus _USBEngineStatus;
 USBDeviceStatus _USBDeviceStatus;
-unsigned char _USBEngineStatus;
+unsigned char _USBCurrentConfiguration;
+
 unsigned char _USBPendingDeviceAddress;
 rom unsigned char *_USBDescriptorToSend;
 unsigned char _USBDescriptorBytesLeft;
-USBDeviceState _USBDeviceState;
 
 #pragma romdata
 rom const unsigned char _USBDeviceDescriptor[] = {
     0x12,               // bLength
-    DEVICE,             // bDescriptorType
+    USB_DEVICE_DESCRIPTOR_TYPE,             // bDescriptorType
     0x10,               // bcdUSB (low byte)
     0x01,               // bcdUSB (high byte)
     0x00,               // bDeviceClass
     0x00,               // bDeviceSubClass
     0x00,               // bDeviceProtocol
-    MAX_PACKET_SIZE,    // bMaxPacketSize
+    EP0_SIZE,    // bMaxPacketSize
     0xD8,               // idVendor (low byte)
     0x04,               // idVendor (high byte)
     0x01,               // idProduct (low byte)
@@ -102,21 +105,21 @@ rom const unsigned char _USBDeviceDescriptor[] = {
     0x01,               // iManufacturer
     0x02,               // iProduct
     0x00,               // iSerialNumber (none)
-    NUM_CONFIGURATIONS  // bNumConfigurations
+    NUMBER_OF_USB_CONFIGURATIONS  // bNumConfigurations
 };
 
 rom const unsigned char _USBConfigurationDescriptor[] = {
     0x09,               // bLength
-    CONFIGURATION,      // bDescriptorType
+    USB_CONFIGURATION_DESCRIPTOR_TYPE,      // bDescriptorType
     0x12,               // wTotalLength (low byte)
     0x00,               // wTotalLength (high byte)
-    NUM_INTERFACES,     // bNumInterfaces
+    NUMBER_OF_USB_INTERFACES,     // bNumInterfaces
     0x01,               // bConfigurationValue
     0x00,               // iConfiguration (none)
     0xA0,               // bmAttributes
     0x32,               // bMaxPower (100 mA)
     0x09,               // bLength (Interface1 descriptor starts here)
-    INTERFACE,          // bDescriptorType
+    USB_INTERFACE_DESCRIPTOR_TYPE,          // bDescriptorType
     0,                  // bInterfaceNumber
     0x00,               // bAlternateSetting
     0x00,               // bNumEndpoints (excluding EP0)
@@ -132,14 +135,14 @@ rom const rom const unsigned char *_USBConfigurationDescriptors[] = {
 
 rom const unsigned char _USBLangIDStringDescriptor[] = {    // LangID (special string descriptor at index 0)
     0x04,               // bLength
-    STRING,             // bDescriptorType
+    USB_STRING_DESCRIPTOR_TYPE,             // bDescriptorType
     0x09,               // wLANGID[0] (low byte)
     0x04                // wLANGID[0] (high byte)
 };
 
 rom const unsigned char _USBManufacturerStringDescriptor[] = {
     0x36,               // bLength
-    STRING,             // bDescriptorType
+    USB_STRING_DESCRIPTOR_TYPE,             // bDescriptorType
     'M', 0x00, 'i', 0x00, 'c', 0x00, 'r', 0x00, 'o', 0x00, 'c', 0x00, 'h', 0x00, 'i', 0x00, 'p', 0x00, ' ', 0x00,
     'T', 0x00, 'e', 0x00, 'c', 0x00, 'h', 0x00, 'n', 0x00, 'o', 0x00, 'l', 0x00, 'o', 0x00, 'g', 0x00, 'y', 0x00, ',', 0x00, ' ', 0x00,
     'I', 0x00, 'n', 0x00, 'c', 0x00, '.', 0x00
@@ -147,7 +150,7 @@ rom const unsigned char _USBManufacturerStringDescriptor[] = {
 
 rom const unsigned char _USBDeviceStringDescriptor[] = {
     0x44,               // bLength
-    STRING,             // bDescriptorType
+    USB_STRING_DESCRIPTOR_TYPE,             // bDescriptorType
     'E', 0x00, 'N', 0x00, 'G', 0x00, 'R', 0x00, ' ', 0x00, '2', 0x00, '2', 0x00, '1', 0x00, '0', 0x00, ' ', 0x00,
     'P', 0x00, 'I', 0x00, 'C', 0x00, '1', 0x00, '8', 0x00, 'F', 0x00, '2', 0x00, '4', 0x00, '5', 0x00, '5', 0x00, ' ', 0x00,
     'U', 0x00, 'S', 0x00, 'B', 0x00, ' ', 0x00,
@@ -184,6 +187,7 @@ void _low_priority_isr(void) {_asm goto LowPriorityISR _endasm}
 #pragma interrupt HighPriorityISR
 void HighPriorityISR(void)
 {
+    LATC &= 0xFE;
     // Suspend when idle
     if (UIRbits.IDLEIF) {
         UCONbits.SUSPND = 1;
@@ -496,13 +500,13 @@ void _USBProcessEP0(USBTransaction *transaction)
                 case GET_DESCRIPTOR:
                     // Device only (bmRequestType)
                     switch ((wValue>>8)&0x00FF) { // High byte contains descriptor type
-                        case DEVICE:
+                        case USB_DEVICE_DESCRIPTOR_TYPE:
                             _USBWriteSingleDescriptor(_USBDeviceDescriptor);
                             break;
-                        case CONFIGURATION:
+                        case USB_CONFIGURATION_DESCRIPTOR_TYPE:
                             _USBWriteDescriptor(_USBConfigurationDescriptors[wValue&0x00FF], (_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthL_OFFSET]+((_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthH_OFFSET])*0x100);
                             break;
-                        case STRING:
+                        case USB_STRING_DESCRIPTOR_TYPE:
                             _USBWriteSingleDescriptor(_USBStringDescriptors[wValue]);
                             break;
                         default:
@@ -516,7 +520,7 @@ void _USBProcessEP0(USBTransaction *transaction)
                     break;
                 case SET_CONFIGURATION:
                     // Device only
-                    if (wValue <= NUMBER_OF_CONFIGURATIONS) {
+                    if (wValue <= NUMBER_OF_USB_CONFIGURATIONS) {
                         _USBCurrentConfiguration = wValue;
                         // Disable all endpoints except 0
 #warning must update so that other endpoints are to work later
