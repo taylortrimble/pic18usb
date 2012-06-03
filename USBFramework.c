@@ -72,9 +72,24 @@
 #pragma config DEBUG  = OFF
 
 #define SHOW_ENUM_STATUS
-#define UPDATE_ENUM_STATUS(status) LATC=(1<<status);
+#define ENABLE_LOGGING
+
+#ifdef SHOW_ENUM_STATUS
+#define UPDATE_ENUM_STATUS(status) LATC=(1<<status)
+#else
+#define UPDATE_ENUM_STATUS(status);
+#endif
+
 #define flag LATC |= 0x01
+#define clrflag LATC &= 0xFE
 #define whoa flag; while(1)
+
+typedef enum _USBLogCode {
+    USBLogCodeReset = 1,
+    USBLogCodeGetDeviceDescriptor = 2,
+    USBLogCodeGetConfigurationDescriptor = 3,
+    USBLogCodeSetAddress = 4
+} USBLogCode;
 
 #pragma udata
 USBDeviceState _USBDeviceState;
@@ -86,12 +101,15 @@ unsigned char _USBPendingDeviceAddress;
 rom unsigned char *_USBDescriptorToSend;
 unsigned char _USBDescriptorBytesLeft;
 
+USBLogCode _USBLogArray[32];
+unsigned char _USBLogArrayCount;
+
 #pragma romdata
 rom const unsigned char _USBDeviceDescriptor[] = {
     0x12,                           // bLength
     USB_DEVICE_DESCRIPTOR_TYPE,     // bDescriptorType
-    0x10,                           // bcdUSB (low byte)
-    0x01,                           // bcdUSB (high byte)
+    0x00,                           // bcdUSB (low byte)
+    0x02,                           // bcdUSB (high byte)
     0x00,                           // bDeviceClass
     0x00,                           // bDeviceSubClass
     0x00,                           // bDeviceProtocol
@@ -166,6 +184,7 @@ rom const rom const unsigned char *_USBStringDescriptors[] = {
 #pragma code
 void HighPriorityISR(void);
 void LowPriorityISR(void);
+void _USBLog(USBLogCode logCode);
 USBTransaction _USBGetCurrentTransaction(void);
 void _USBHandleControlError(void);
 void _USBResetEP0InBuffer(void);
@@ -187,7 +206,6 @@ void _low_priority_isr(void) {_asm goto LowPriorityISR _endasm}
 #pragma interrupt HighPriorityISR
 void HighPriorityISR(void)
 {
-    LATC &= 0xFE;
     // Suspend when idle
     if (UIRbits.IDLEIF) {
         UCONbits.SUSPND = 1;
@@ -223,6 +241,7 @@ void HighPriorityISR(void)
 
     // Handle USB reset
     if (UIRbits.URSTIF) {
+        _USBLog(USBLogCodeReset);
         _USBEngineReset();
         UIRbits.URSTIF = 0;
     }
@@ -249,6 +268,44 @@ void HighPriorityISR(void)
 void LowPriorityISR(void)
 {
     // Low interrupt service routine
+}
+
+void _USBLog(USBLogCode logCode)
+{
+#ifdef ENABLE_LOGGING
+    static unsigned char writeIndex = 0;
+
+    _USBLogArrayCount = writeIndex + 1;
+    if (writeIndex < 32) {
+        _USBLogArray[writeIndex++] = logCode;
+    }
+#endif
+}
+
+void _USBDisplayLog(void)
+{
+#ifdef ENABLE_LOGGING
+    unsigned char index;
+
+    LATC = 255;
+    Delay10KTCYx(255);
+    Delay10KTCYx(255);
+    Delay10KTCYx(255);
+    Delay10KTCYx(255);
+
+    for(index = 0; index < _USBLogArrayCount; index++) {
+        LATC = _USBLogArray[index];
+        Delay10KTCYx(255);
+        Delay10KTCYx(255);
+        Delay10KTCYx(255);
+        Delay10KTCYx(255);
+        LATC = 0x0E;
+        Delay10KTCYx(255);
+        Delay10KTCYx(255);
+        Delay10KTCYx(255);
+        Delay10KTCYx(255);
+    }
+#endif
 }
 
 USBTransaction _USBGetCurrentTransaction(void)
@@ -487,6 +544,7 @@ void _USBProcessEP0(USBTransaction *transaction)
                     break;
                 case SET_ADDRESS:
                     // Device only
+                    _USBLog(USBLogCodeSetAddress);
                     if (wValue <= 127) {
                         _USBEngineStatus |= USBEngineStatusAddressing;
                         _USBPendingDeviceAddress = wValue;
@@ -500,9 +558,11 @@ void _USBProcessEP0(USBTransaction *transaction)
                     // Device only (bmRequestType)
                     switch ((wValue>>8)&0x00FF) {   // High byte contains descriptor type
                         case USB_DEVICE_DESCRIPTOR_TYPE:
+                            _USBLog(USBLogCodeGetDeviceDescriptor);
                             _USBWriteSingleDescriptor(_USBDeviceDescriptor);
                             break;
                         case USB_CONFIGURATION_DESCRIPTOR_TYPE:
+                            _USBLog(USBLogCodeGetConfigurationDescriptor);
                             _USBWriteDescriptor(_USBConfigurationDescriptors[wValue&0x00FF], (_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthL_OFFSET]+((_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthH_OFFSET])*0x100);
                             break;
                         case USB_STRING_DESCRIPTOR_TYPE:
@@ -532,10 +592,10 @@ void _USBProcessEP0(USBTransaction *transaction)
                         UEP7 = 0x00;
                         if (_USBCurrentConfiguration == 0) {
                             _USBDeviceState |= USBDeviceStateAddressed;
-                            LATC = 0b0100;
+                            UPDATE_ENUM_STATUS(_USBDeviceState);
                         } else {
                             _USBDeviceState = USBDeviceStateConfigured;
-                            LATC = 0b1000;
+                            UPDATE_ENUM_STATUS(_USBDeviceState);
                         }
                         _USBResetEP0InBuffer();
                     } else {
@@ -723,8 +783,13 @@ void Setup()
 }
 
 void main(void) {
+    unsigned char index;
+
     Setup();
     while (1) {
-        // Main run loop
+        for (index = 0; index < 25; index++) {
+            Delay10KTCYx(255);
+        }
+        _USBDisplayLog();
     }
 }
