@@ -73,6 +73,7 @@
 
 #define SHOW_ENUM_STATUS
 #define ENABLE_LOGGING
+#define MINCH_RESET
 
 #ifdef SHOW_ENUM_STATUS
 #define UPDATE_ENUM_STATUS(status) LATC=(1<<status)
@@ -88,7 +89,9 @@ typedef enum _USBLogCode {
     USBLogCodeReset = 1,
     USBLogCodeGetDeviceDescriptor = 2,
     USBLogCodeGetConfigurationDescriptor = 3,
-    USBLogCodeSetAddress = 4
+    USBLogCodeSetAddress = 4,
+    USBLogCodeError = 5,
+    USBLogCodeMiscError = 6
 } USBLogCode;
 
 #pragma udata
@@ -127,24 +130,33 @@ rom const unsigned char _USBDeviceDescriptor[] = {
 };
 
 rom const unsigned char _USBConfigurationDescriptor[] = {
-    0x09,                               // bLength
+    9,                                  // bLength
     USB_CONFIGURATION_DESCRIPTOR_TYPE,  // bDescriptorType
-    0x12,                               // wTotalLength (low byte)
+    25,                                 // wTotalLength (low byte)
     0x00,                               // wTotalLength (high byte)
     NUMBER_OF_USB_INTERFACES,           // bNumInterfaces
     0x01,                               // bConfigurationValue
     0x00,                               // iConfiguration (none)
     0xA0,                               // bmAttributes
-    0x32,                               // bMaxPower (100 mA)
+    50,                                 // bMaxPower (100 mA)
+
     0x09,                               // bLength (Interface1 descriptor starts here)
     USB_INTERFACE_DESCRIPTOR_TYPE,      // bDescriptorType
     0,                                  // bInterfaceNumber
-    0x00,                               // bAlternateSetting
-    0x00,                               // bNumEndpoints (excluding EP0)
+    0,                                  // bAlternateSetting
+    NUMBER_OF_USB_ENDPOINTS,            // bNumEndpoints (excluding EP0)
     0xFF,                               // bInterfaceClass (vendor specific class code)
     0x00,                               // bInterfaceSubClass
     0xFF,                               // bInterfaceProtocol (vendor specific protocol used)
-    0x00                                // iInterface (none)
+    0x00,                               // iInterface (none)
+
+    7,                                  // bLength (Endpoint1 descriptor starts here)
+    USB_ENDPOINT_DESCRIPTOR_TYPE,
+    0x81,                               // Endpoint address 1-IN
+    0x03,                               // Interrupt endpoint
+    8,                                  // wMaxPacketSize (low byte)
+    0x00,                               // wMaxPacketSize (high byte)
+    250,                                // bInterval (250 ms at full speed)
 };
 
 rom const rom const unsigned char *_USBConfigurationDescriptors[] = {
@@ -193,6 +205,7 @@ void _USBSendDescriptor(void);
 void _USBWriteDescriptor(rom const unsigned char *descriptor, unsigned char bytes);
 void _USBWriteSingleDescriptor(rom const unsigned char *descriptor);
 void _USBProcessEP0(USBTransaction *transaction);
+void _USBProcessEP1(USBTransaction *transaction);
 void _USBEngineReset(void);
 void _USBConfigureBufferDescriptors(void);
 void _USBSetup(void);
@@ -235,6 +248,8 @@ void HighPriorityISR(void)
     // Error handling - ignored
     if (UIRbits.UERRIF) {
         // Ignored
+        if (UEIRbits.CRC5EF) _USBLog(USBLogCodeError);
+        else _USBLog(USBLogCodeMiscError);
         UEIR = 0x00;            // Clear all USB err flags
         UIRbits.UERRIF = 0;
     }
@@ -254,6 +269,8 @@ void HighPriorityISR(void)
             case 0:
                 _USBProcessEP0(&transaction);
                 break;
+            case 1:
+                _USBProcessEP1(&transaction);
             default:
                 break;
         }
@@ -408,6 +425,7 @@ void _USBProcessEP0(USBTransaction *transaction)
     unsigned char bmRequestType;
     unsigned wValue;
     unsigned wIndex;
+    unsigned wLength;
 
     transactionData = transaction->bd->address;
 
@@ -418,6 +436,7 @@ void _USBProcessEP0(USBTransaction *transaction)
             bmRequestType = transactionData[bmRequestType_OFFSET];
             wValue = transactionData[wValueL_OFFSET] + (transactionData[wValueH_OFFSET])*0x100;
             wIndex = transactionData[wIndexL_OFFSET] + (transactionData[wIndexH_OFFSET])*0x100;
+            wLength = transactionData[wLengthL_OFFSET] + (transactionData[wLengthH_OFFSET])*0x100;
             
             // Reset OUT endpoint, dequeue any IN packets, and re-enable packet transfers
             _USBBD0O.status = ((!(bmRequestType&HOST_TO_DEVICE)&&wValue) ? (UOWN|DTS|DTSEN) : (UOWN|DTSEN));    // Choose correct DATA0/DATA1
@@ -563,7 +582,7 @@ void _USBProcessEP0(USBTransaction *transaction)
                             break;
                         case USB_CONFIGURATION_DESCRIPTOR_TYPE:
                             _USBLog(USBLogCodeGetConfigurationDescriptor);
-                            _USBWriteDescriptor(_USBConfigurationDescriptors[wValue&0x00FF], (_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthL_OFFSET]+((_USBConfigurationDescriptors[wValue&0x00FF])[wTotalLengthH_OFFSET])*0x100);
+                            _USBWriteDescriptor(_USBConfigurationDescriptors[wValue&0x00FF], wLength);
                             break;
                         case USB_STRING_DESCRIPTOR_TYPE:
                             _USBWriteSingleDescriptor(_USBStringDescriptors[wValue]);
@@ -583,7 +602,7 @@ void _USBProcessEP0(USBTransaction *transaction)
                         _USBCurrentConfiguration = wValue;
                         // Disable all endpoints except 0
 #warning must update so that other endpoints are to work later
-                        UEP1 = 0x00;
+                        //UEP1 = 0x00;
                         UEP2 = 0x00;
                         UEP3 = 0x00;
                         UEP4 = 0x00;
@@ -671,8 +690,63 @@ void _USBProcessEP0(USBTransaction *transaction)
     }
 }
 
+void _USBProcessEP1(USBTransaction *transaction)
+{
+    unsigned char index;
+
+    switch (transaction->token) {
+        case USBTokenIN:
+            _USBBD1I.status = _USBBD1I.status^DTS;
+            _USBBD1I.status = (_USBBD1I.status&DTS)|(UOWN|DTSEN);
+            _USBBD1I.count = 8;
+            
+            for (index = 0; index < 8; index++) {
+                _USBEP1InBuffer[index] = PORTC+index;
+            }
+            break;
+
+        default:
+            _USBBD1I.status = (_USBBD1I.status&DTS)|(UOWN|DTSEN);
+            _USBBD1I.count = 0;
+            break;
+    }
+}
+
 void _USBEngineReset(void)
 {
+#ifdef MINCH_RESET
+    _USBCurrentConfiguration = 0;
+
+    UIRbits.TRNIF = 0;      // clear TRNIF four times to clear out the USTAT FIFO
+    UIRbits.TRNIF = 0;
+    UIRbits.TRNIF = 0;
+    UIRbits.TRNIF = 0;
+
+    UEP0 = 0x00;                // clear all EP control registers to disable all endpoints
+    UEP1 = 0x00;
+    UEP2 = 0x00;
+    UEP3 = 0x00;
+    UEP4 = 0x00;
+    UEP5 = 0x00;
+    UEP6 = 0x00;
+    UEP7 = 0x00;
+
+    _USBBD0O.count = EP0_SIZE;
+    _USBBD0O.address = _USBEP0OutBuffer;    // EP0 OUT gets a buffer
+    _USBBD0O.status = 0x88;                 // set UOWN bit (USB can write)
+    _USBBD0I.address = _USBEP0InBuffer;     // EP0 IN gets a buffer
+    _USBBD0I.status = 0x08;                 // clear UOWN bit (MCU can write)
+
+    UADDR = 0x00;                           // set USB Address to 0
+    UIR = 0x00;                             // clear all the USB interrupt flags
+    UEP0 = 0x16;                            // EP0 is a control pipe and requires an ACK
+    UEP1 = 0x1A;                            // EP1 is an IN pipe and requires ACK
+    UEIE = 0xFF;                            // enable all error interrupts
+
+    _USBDeviceState = USBDeviceStateReset;
+    _USBDeviceStatus = 0x01;   // self powered, remote wakeup disabled
+    UPDATE_ENUM_STATUS(_USBDeviceState);
+#else
     unsigned char *index;
 
     // Clear USTAT FIFO
@@ -706,6 +780,8 @@ void _USBEngineReset(void)
 
     // Enable EP0
     UEP0 = 0x16;    // SETUP endpoint, not stalled
+    UEP1 = 0x1A;    // IN endpoint, not stalled
+#endif
 }
 
 void _USBConfigureBufferDescriptors(void)
@@ -745,6 +821,7 @@ void _USBSetup()
 
     // Configure endpoints
     UEP0 = 0x16;            // SETUP endpoint, not stalled
+    UEP1 = 0x1A;
 
     // Enable USB
     Delay1KTCYx(24);        // Wait 2ms for clock to stabilize

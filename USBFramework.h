@@ -6,7 +6,7 @@
 // Buffer descriptor status bits
 #define UOWN                (0x80)
 #define DTS                 (0x40)
-#define DTSEN               (0x08)
+#define DTSEN               0//(0x08)
 #define BSTALL              (0x04)
 
 // standard descriptor types
@@ -120,3 +120,4 @@ far USBBufferDescriptor _USBBD7I;
 #pragma udata __USB_ENDPOINT_BUFFERS__=0x0280
 far unsigned char _USBEP0OutBuffer[EP0_SIZE];
 far unsigned char _USBEP0InBuffer[EP0_SIZE];
+far unsigned char _USBEP1InBuffer[8];
