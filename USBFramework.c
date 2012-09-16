@@ -37,6 +37,9 @@
 // TO THIS SOFTWARE. THE AUTHOR SHALL NOT, UNDER ANY CIRCUMSTANCES, BE LIABLE 
 // FOR SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.
 // 
+
+//Joe Added this to test, just ignore!
+
 #include <p18f14k50.h>
 #include <delays.h>
 #include "USBFramework.h"
